@@ -1,0 +1,61 @@
+# ESP Component Registry manifest — https://components.espressif.com
+#
+# Publishes the rbAmp client component as `rbamp/rbamp` so users can
+# install it with:
+#
+#     idf.py add-dependency "rbamp/rbamp^1.2"
+#
+# Update the `repository` and `documentation` URLs once the repo lands at a
+# public location; the registry rejects manifests with placeholder URLs.
+
+description: "Client component for the rbAmp I²C sensor / dimmer module."
+version: "1.2.0"
+license: "MIT"
+url: "https://github.com/rb-amp/rbamp-esp-idf"
+repository: "https://github.com/rb-amp/rbamp-esp-idf.git"
+documentation: "https://rbamp.com/docs/modules-basic-standard-api-reference"
+issues: "https://github.com/rb-amp/rbamp-esp-idf/issues"
+
+# Tags help discovery on the registry.
+tags:
+  - rbamp
+  - i2c
+  - energy
+  - metering
+  - power-factor
+  - sensor
+
+# Minimum IDF version — we use the new `i2c_master` driver (esp_driver_i2c),
+# stable since v5.2. Older IDF projects should use the rbAmp Arduino library
+# via arduino-esp32 as a component.
+#
+# Note: esp_driver_i2c is a BUILT-IN IDF component (not a registry package),
+# so it's pulled in via the `REQUIRES esp_driver_i2c` line in CMakeLists.txt
+# rather than listed here. The ESP Component Registry validator rejects
+# manifests that reference built-ins under the "espressif/" namespace.
+dependencies:
+  idf:
+    version: ">=5.2"
+
+# Supported chip targets.
+#
+# Note: esp32p4 is omitted — P4 chip support landed in IDF v5.3+ and our
+# minimum (`dependencies.idf: >=5.2`) would let a v5.2 user attempt a P4
+# build that fails with "target esp32p4 not in idf". Re-enable once the
+# minimum IDF version is bumped to >=5.3.
+targets:
+  - esp32
+  - esp32s2
+  - esp32s3
+  - esp32c2
+  - esp32c3
+  - esp32c6
+  - esp32h2
+
+# Files to exclude from the published archive.
+files:
+  exclude:
+    - "examples/**/build/**"
+    - "examples/**/sdkconfig"
+    - "examples/**/sdkconfig.old"
+    - "**/.cache/**"

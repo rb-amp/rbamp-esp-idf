@@ -1,0 +1,21 @@
+# IDF build artefacts
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+# Output binaries
+*.elf
+*.bin
+*.map
+# IDE / editor caches
+.cache/
+.vscode/
+.idea/
+# Session / orchestration internals
+.mcp.json
+CLAUDE.md
+AGENTS.md
+# OS
+.DS_Store
+Thumbs.db

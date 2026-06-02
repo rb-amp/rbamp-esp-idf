@@ -1,0 +1,90 @@
+# Kconfig — rbAmp component menu under `idf.py menuconfig` -> Component config -> rbAmp.
+
+menu "rbAmp client"
+
+    config RBAMP_DEFAULT_I2C_FREQ_HZ
+        int "Default I2C SCL frequency (Hz)"
+        range 50000 1000000
+        default 50000
+        help
+            SCL frequency the rbAmp component requests when adding a device
+            handle to the bus. Default 50 kHz is mandated by SPEC §B.5 to
+            mitigate slave NACK rate observed at 100 kHz on ESP-IDF v5
+            i2c_master driver (~20% NACK rate drops to <5%). 100 kHz becomes
+            viable after v1.1 firmware ships the slave-side fix; 400 kHz is
+            supported but rarely useful at the 60 s polling cadence typical
+            for this device.
+
+    config RBAMP_I2C_TIMEOUT_MS
+        int "I2C transaction timeout (ms)"
+        range 10 1000
+        default 100
+        help
+            Timeout passed to i2c_master_transmit/receive. Must be long
+            enough to absorb the device's pre-read callback latency (a few
+            milliseconds when the snapshot window latches). Defaults to
+            100 ms, comfortable for both 100 kHz and 400 kHz buses.
+
+    config RBAMP_NACK_RETRY_ATTEMPTS
+        int "I2C NACK retry attempts"
+        range 1 10
+        default 3
+        help
+            Number of attempts for each single-byte read. Slave on
+            ESP-IDF v5 i2c_master driver shows ~20% transient NACK rate at
+            100 kHz; 3 attempts with a 5 ms gap drops residual error rate
+            to <0.8%. See SPEC §B.5 for the full discipline. Set to 1 to
+            disable retry once v1.1 firmware lands and the NACK source is
+            fixed at the slave.
+
+    config RBAMP_NACK_RETRY_GAP_MS
+        int "Gap between retry attempts (ms)"
+        range 1 100
+        default 5
+        help
+            Delay between consecutive retry attempts. Long enough for the
+            slave's I2C peripheral to flush its ADDR-phase state after a
+            failed transaction. 5 ms is empirically sufficient on bench
+            hardware.
+
+    config RBAMP_DISABLE_ENERGY
+        bool "Disable built-in Wh accumulator"
+        default n
+        help
+            Removes the per-channel double-precision Wh accumulator from
+            every rbamp_handle_t. Saves a few hundred bytes of RAM per
+            device handle and removes the rbamp_energy_* API. Use this if
+            you only need raw period_avg_power readings and integrate
+            energy yourself.
+
+    choice RBAMP_LOG_LEVEL_CHOICE
+        prompt "rbAmp log level"
+        default RBAMP_LOG_LEVEL_INFO
+        help
+            Compile-time log level for messages emitted by the component
+            (tag "rbamp"). Component sets @c LOG_LOCAL_LEVEL before including
+            @c esp_log.h, so this choice gates whether the log strings are
+            even compiled into the binary. Independent of
+            @c CONFIG_LOG_DEFAULT_LEVEL.
+
+        config RBAMP_LOG_LEVEL_NONE
+            bool "None — strip all log strings"
+        config RBAMP_LOG_LEVEL_ERROR
+            bool "Errors only"
+        config RBAMP_LOG_LEVEL_WARN
+            bool "Warnings and errors"
+        config RBAMP_LOG_LEVEL_INFO
+            bool "Info, warnings, and errors"
+        config RBAMP_LOG_LEVEL_DEBUG
+            bool "Debug — verbose"
+    endchoice
+
+    config RBAMP_LOG_LEVEL
+        int
+        default 0 if RBAMP_LOG_LEVEL_NONE
+        default 1 if RBAMP_LOG_LEVEL_ERROR
+        default 2 if RBAMP_LOG_LEVEL_WARN
+        default 3 if RBAMP_LOG_LEVEL_INFO
+        default 4 if RBAMP_LOG_LEVEL_DEBUG
+
+endmenu
