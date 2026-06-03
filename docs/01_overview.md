@@ -177,63 +177,7 @@ For all typical tasks in the first rows, the component is the right fit.
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────┐
-│  User application (app_main, FreeRTOS)              │
-│   rbamp_new(bus, 0x50, &dev);                       │
-│   rbamp_begin(dev);                                 │
-│   rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013); │
-│   rbamp_set_ct_model(dev, 3);                       │
-│   rbamp_read_period_snapshot(dev, &snap, 50, false);│
-│   rbamp_energy_wh(dev, 0);                          │
-└─────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Public component API (rbamp.h)                     │
-│   ┌─────────────────────────────────────────────┐   │
-│   │ Lifecycle: rbamp_new / rbamp_del /          │   │
-│   │   rbamp_begin / rbamp_probe / rbamp_wait_ready │ │
-│   │ RT reads:     rbamp_read_voltage /          │   │
-│   │   rbamp_read_power(ch) / rbamp_read_all(&s) │   │
-│   │ Period:       rbamp_latch_period /          │   │
-│   │   rbamp_read_period_snapshot                │   │
-│   │ Configuration: rbamp_set_sensor_class /     │   │
-│   │   rbamp_set_ct_model / rbamp_set_ct_model_ch│   │
-│   │ Multi-module: rbamp_broadcast_latch         │   │
-│   │ Diagnostics:  rbamp_err_to_str(esp_err_t)   │   │
-│   └─────────────────────────────────────────────┘   │
-│                       │                             │
-│                       ▼                             │
-│   ┌─────────────────────────────────────────────┐   │
-│   │ Internal layer (src/rbamp.c):               │   │
-│   │  read_u8 / read_u32_le / read_float_le /    │   │
-│   │  write_reg / write_cmd                      │   │
-│   │  retry + sanity discipline                  │   │
-│   └─────────────────────────────────────────────┘   │
-│                       │                             │
-│                       ▼                             │
-│   ┌─────────────────────────────────────────────┐   │
-│   │ Handle state (struct rbamp_obj_t):          │   │
-│   │  • Wh accumulator (double[3], compile-out)  │   │
-│   │  • topology, channels, has_voltage_hw       │   │
-│   │  • last_latch_us (master_dt_ms tracking)    │   │
-│   └─────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  ESP-IDF i2c_master driver (driver/i2c_master.h)    │
-│   i2c_master_transmit / transmit_receive            │
-└─────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  rbAmp module at address 0x50                       │
-│   • U / I / P / PF measurement pipeline (~200 ms)   │
-│   • Period accumulator (atomic CMD_LATCH_PERIOD)    │
-└─────────────────────────────────────────────────────┘
-```
+![rbAmp ESP-IDF component architecture — app to public API to i2c_master driver to module @0x50](images/esp-idf-architecture.png)
 
 ## Logging and Kconfig
 
