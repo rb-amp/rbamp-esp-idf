@@ -210,24 +210,7 @@ For more details, see [09 · API reference](09_api_reference.md), the
 
 ### The `rbamp_begin()` flow
 
-```text
-app           rbamp                i2c_master              rbAmp slave
-  │             │                    │                       │
-  ├─rbamp_begin(dev)►                │                       │
-  │             ├─read_u8(REG_VERSION)►                      │
-  │             │                    ├─tx_rx([0x03], 1) ────►│
-  │             │                    │◄────────── 0x03 ──────┤  (v1.2)
-  │             │                    │                       │
-  │             ├─read_float_le(U_RMS)►(4 single-byte tx_rx) │
-  │             │  → 226.3 V         │                       │
-  │             │  → has_voltage_hw = true                   │
-  │             │                    │                       │
-  │             ├─write_cmd(LATCH)──►│                       │
-  │             │                    ├─tx([0x01, 0x27]) ────►│
-  │             │  vTaskDelay(50ms)  │                       │
-  │             │                    │                       │
-  │◄───ESP_OK───┤                    │                       │
-```
+![rbAmp ESP-IDF rbamp_begin() sequence](images/esp-idf-begin-flow.png)
 
 The first latch is a primer (the module returns what has been
 accumulated since power-up, which is unsuitable for tariff metering).
@@ -236,27 +219,7 @@ user code never sees it.
 
 ### The `rbamp_read_period_snapshot(dev, &snap, 50, false)` flow
 
-```text
-app           rbamp                i2c_master              rbAmp slave
-  │             │                    │                       │
-  ├─read_period_snapshot(snap)►      │                       │
-  │             ├─write_cmd(LATCH)──►│  t_now = esp_timer_get_time()
-  │             │                    │                       │
-  │             │  vTaskDelay(50ms)  │                       │
-  │             │                    │                       │
-  │             ├─read_u8(PERIOD_VALID)►│                    │
-  │             │  → bit0 = 1        │                       │
-  │             │                    │                       │
-  │             ├─read_float_le(AVG_P0)►(4 tx_rx)            │
-  │             ├─read_float_le(MAX_P0)►(4 tx_rx)            │
-  │             ├─read_u32_le(LATCH_MS)►(4 tx_rx)            │
-  │             │                    │                       │
-  │             │  master_dt_ms = (t_now - last_latch_us)/1000│
-  │             │  energy_wh[ch] += avg_p[ch]*master_dt_ms/3.6e6│
-  │             │  last_latch_us = t_now                     │
-  │             │                    │                       │
-  │◄───ESP_OK───┤                    │                       │
-```
+![rbAmp ESP-IDF read_period_snapshot sequence](images/esp-idf-snapshot-flow.png)
 
 The atomic latch on the module side guarantees that every ADC
 micro-sample within a period lands in exactly one snapshot — with no

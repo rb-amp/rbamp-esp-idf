@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="732" viewBox="0 0 1160 732" font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif">
+  <line x1="110.0" y1="72.0" x2="110.0" y2="724.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="29.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="110.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">app</tspan></text>
+  <line x1="380.0" y1="72.0" x2="380.0" y2="724.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="299.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="380.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">rbamp</tspan></text>
+  <line x1="660.0" y1="72.0" x2="660.0" y2="724.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="579.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="660.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">i2c_master</tspan></text>
+  <line x1="1010.0" y1="72.0" x2="1010.0" y2="724.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="929.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="1010.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">rbAmp slave</tspan></text>
+  <line x1="110.0" y1="110.0" x2="371.0" y2="110.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 371 105 L 371 115 L 380 110 Z" fill="#00203F"/>
+  <text x="245.0" y="101.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">rbamp_begin(dev)</tspan></text>
+  <circle cx="110.0" cy="110.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="380.0" y1="158.0" x2="651.0" y2="158.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 153 L 651 163 L 660 158 Z" fill="#00203F"/>
+  <text x="520.0" y="149.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">read_u8(REG_VERSION)</tspan></text>
+  <circle cx="380.0" cy="158.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="660.0" y1="206.0" x2="1001.0" y2="206.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 1001 201 L 1001 211 L 1010 206 Z" fill="#00203F"/>
+  <text x="835.0" y="197.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">tx_rx([0x03], 1)</tspan></text>
+  <circle cx="660.0" cy="206.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="1010.0" y1="254.0" x2="669.0" y2="254.0" stroke="#00203F" stroke-width="2" stroke-linecap="round" stroke-dasharray="7 5"/>
+  <path d="M 669 249 L 669 259 L 660 254 Z" fill="#00203F"/>
+  <text x="835.0" y="245.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">0x03</tspan></text>
+  <circle cx="1010.0" cy="254.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="1024.0" y="259.0" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="13" fill="#8a9ab0" font-weight="400">(v1.2)</tspan></text>
+  <line x1="380.0" y1="328.0" x2="651.0" y2="328.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 323 L 651 333 L 660 328 Z" fill="#00203F"/>
+  <text x="520.0" y="319.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">read_float_le(U_RMS)</tspan></text>
+  <circle cx="380.0" cy="328.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="674.0" y="333.0" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="13" fill="#8a9ab0" font-weight="400">(4 single-byte tx_rx)</tspan></text>
+  <text x="394.0" y="381.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">→ 226.3 V</tspan></text>
+  <circle cx="380.0" cy="376.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="394.0" y="429.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">→ has_voltage_hw = true</tspan></text>
+  <circle cx="380.0" cy="424.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="380.0" y1="498.0" x2="651.0" y2="498.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 493 L 651 503 L 660 498 Z" fill="#00203F"/>
+  <text x="520.0" y="489.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">write_cmd(LATCH)</tspan></text>
+  <circle cx="380.0" cy="498.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="660.0" y1="546.0" x2="1001.0" y2="546.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 1001 541 L 1001 551 L 1010 546 Z" fill="#00203F"/>
+  <text x="835.0" y="537.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">tx([0x01, 0x27])</tspan></text>
+  <circle cx="660.0" cy="546.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="394.0" y="599.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">vTaskDelay(50ms)</tspan></text>
+  <circle cx="380.0" cy="594.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="380.0" y1="668.0" x2="119.0" y2="668.0" stroke="#00203F" stroke-width="2" stroke-linecap="round" stroke-dasharray="7 5"/>
+  <path d="M 119 663 L 119 673 L 110 668 Z" fill="#00203F"/>
+  <text x="245.0" y="659.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">ESP_OK</tspan></text>
+  <circle cx="380.0" cy="668.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+</svg>

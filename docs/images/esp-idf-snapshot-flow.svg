@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="832" viewBox="0 0 1160 832" font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif">
+  <line x1="110.0" y1="72.0" x2="110.0" y2="824.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="29.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="110.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">app</tspan></text>
+  <line x1="380.0" y1="72.0" x2="380.0" y2="824.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="299.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="380.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">rbamp</tspan></text>
+  <line x1="660.0" y1="72.0" x2="660.0" y2="824.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="579.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="660.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">i2c_master</tspan></text>
+  <line x1="1010.0" y1="72.0" x2="1010.0" y2="824.0" stroke="#00203F" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="2 6" stroke-opacity="0.35"/>
+  <rect x="929.0" y="28.0" width="162.0" height="44.0" rx="10" ry="10" fill="#00203F" stroke="none" stroke-width="1.5"/>
+  <text x="1010.0" y="56.0" text-anchor="middle" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="16" fill="#ffffff" font-weight="700">rbAmp slave</tspan></text>
+  <line x1="110.0" y1="110.0" x2="371.0" y2="110.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 371 105 L 371 115 L 380 110 Z" fill="#00203F"/>
+  <text x="245.0" y="101.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">read_period_snapshot(snap)</tspan></text>
+  <circle cx="110.0" cy="110.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="380.0" y1="158.0" x2="651.0" y2="158.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 153 L 651 163 L 660 158 Z" fill="#00203F"/>
+  <text x="520.0" y="149.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">write_cmd(LATCH)</tspan></text>
+  <circle cx="380.0" cy="158.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="674.0" y="163.0" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="13" fill="#8a9ab0" font-weight="400">t_now = esp_timer_get_time()</tspan></text>
+  <text x="394.0" y="237.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">vTaskDelay(50ms)</tspan></text>
+  <circle cx="380.0" cy="232.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="380.0" y1="306.0" x2="651.0" y2="306.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 301 L 651 311 L 660 306 Z" fill="#00203F"/>
+  <text x="520.0" y="297.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">read_u8(PERIOD_VALID)</tspan></text>
+  <circle cx="380.0" cy="306.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="394.0" y="359.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">→ bit0 = 1</tspan></text>
+  <circle cx="380.0" cy="354.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="380.0" y1="428.0" x2="651.0" y2="428.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 423 L 651 433 L 660 428 Z" fill="#00203F"/>
+  <text x="520.0" y="419.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">read_float_le(AVG_P0)</tspan></text>
+  <circle cx="380.0" cy="428.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="674.0" y="433.0" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="13" fill="#8a9ab0" font-weight="400">(4 tx_rx)</tspan></text>
+  <line x1="380.0" y1="476.0" x2="651.0" y2="476.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 471 L 651 481 L 660 476 Z" fill="#00203F"/>
+  <text x="520.0" y="467.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">read_float_le(MAX_P0)</tspan></text>
+  <circle cx="380.0" cy="476.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="674.0" y="481.0" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="13" fill="#8a9ab0" font-weight="400">(4 tx_rx)</tspan></text>
+  <line x1="380.0" y1="524.0" x2="651.0" y2="524.0" stroke="#00203F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 651 519 L 651 529 L 660 524 Z" fill="#00203F"/>
+  <text x="520.0" y="515.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">read_u32_le(LATCH_MS)</tspan></text>
+  <circle cx="380.0" cy="524.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="674.0" y="529.0" style="white-space:pre"><tspan font-family="system-ui,'Segoe UI',Inter,Helvetica,Arial,sans-serif" font-size="13" fill="#8a9ab0" font-weight="400">(4 tx_rx)</tspan></text>
+  <text x="394.0" y="603.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">master_dt_ms = (t_now - last_latch_us)/1000</tspan></text>
+  <circle cx="380.0" cy="598.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="394.0" y="651.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">energy_wh[ch] += avg_p[ch]*master_dt_ms/3.6e6</tspan></text>
+  <circle cx="380.0" cy="646.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <text x="394.0" y="699.0" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#8a9ab0" font-weight="400">last_latch_us = t_now</tspan></text>
+  <circle cx="380.0" cy="694.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+  <line x1="380.0" y1="768.0" x2="119.0" y2="768.0" stroke="#00203F" stroke-width="2" stroke-linecap="round" stroke-dasharray="7 5"/>
+  <path d="M 119 763 L 119 773 L 110 768 Z" fill="#00203F"/>
+  <text x="245.0" y="759.0" text-anchor="middle" style="white-space:pre"><tspan font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" fill="#00203F" font-weight="400">ESP_OK</tspan></text>
+  <circle cx="380.0" cy="768.0" r="3.0" fill="#00203F" stroke="none" stroke-width="1"/>
+</svg>
