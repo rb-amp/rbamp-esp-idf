@@ -1,23 +1,23 @@
 # 07 · DIY integrations
 
 How to feed `rbamp` readings into popular self-hosted automation
-systems. For each platform there is a minimal working ESP-IDF project
-and the matching configuration on the platform side.
+systems. For each platform there is a minimal working ESP-IDF
+project plus the matching configuration on the platform side.
 
-Cloud / commercial integrations (AWS IoT, Azure, GCP, InfluxDB Cloud)
-are in [08 · Cloud integrations](08_cloud_integrations.md).
+Cloud / commercial integrations (AWS IoT, Azure, GCP, InfluxDB
+Cloud) — [08 · Cloud integrations](08_cloud_integrations.md).
 
 | Platform | Transport | Auto-discovery | IDF components |
 |---|---|---|---|
 | Home Assistant | MQTT | yes (HA MQTT Discovery) | `espressif/esp_mqtt_client` |
-| ESPHome | Native API + MQTT | yes (YAML config) | (an alternative framework — see below) |
+| ESPHome | Native API + MQTT | yes (YAML config) | (alternative framework — see below) |
 | Node-RED | MQTT (or HTTP) | manual flow | `espressif/esp_mqtt_client` |
 | OpenHAB | MQTT (or REST) | manual `.things` | `espressif/esp_mqtt_client` |
 | Domoticz | MQTT (auto) or HTTP | yes (MQTT plugin) | `esp_mqtt_client` or `esp_http_client` |
 | InfluxDB OSS + Grafana | HTTPS line-protocol | no | `esp_http_client` |
 
-> Ready-made projects for the two main scenarios are in `examples/`:
-> [`examples/mqtt_publisher/`](../examples/mqtt_publisher/) (a per-channel
+> Ready-made projects for the two main scenarios live in `examples/`:
+> [`examples/mqtt_publisher/`](../examples/mqtt_publisher/) (per-channel
 > MQTT publisher) and [`examples/ha_discovery/`](../examples/ha_discovery/)
 > (HA Auto-discovery on top of mqtt_publisher).
 
@@ -25,8 +25,8 @@ are in [08 · Cloud integrations](08_cloud_integrations.md).
 
 ## Home Assistant — MQTT Auto-discovery
 
-HA MQTT Discovery automatically creates the device and sensors when the
-ESP32 publishes config topics. No YAML edits in HA are needed.
+HA MQTT Discovery automatically creates the device and its sensors
+when the ESP32 publishes config topics. No YAML edits in HA needed.
 
 ### ESP-IDF project (`rbamp` + WiFi STA + esp_mqtt_client)
 
@@ -91,14 +91,14 @@ static void publish_discovery_all(void) {
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                 int32_t event_id, void *event_data) {
     if (event_id == MQTT_EVENT_CONNECTED) {
-        publish_discovery_all();   /* discovery publication on every connect */
+        publish_discovery_all();   /* publish discovery on every connect */
     }
 }
 
 void app_main(void) {
     /* ...nvs_flash_init + esp_netif_init + esp_event_loop_create_default +
-     *    esp_wifi_init/start + waiting for IP_EVENT_STA_GOT_IP... */
-    /* (the pattern from 10 · Troubleshooting, section "Watchdog timeout on WiFi") */
+     *    esp_wifi_init/start + wait for IP_EVENT_STA_GOT_IP... */
+    /* (pattern from 10 · Troubleshooting, "Watchdog timeout during WiFi") */
 
     /* I²C bus + rbAmp handle */
     i2c_master_bus_handle_t bus = NULL;
@@ -107,20 +107,19 @@ void app_main(void) {
     ESP_ERROR_CHECK(rbamp_new(bus, 0x50, &dev));   /* new — never fails
                                                     * with valid arguments */
 
-    /* rbamp_begin may return NACK / VERSION on bus bounce or on a
-     * cold module boot. A soft retry is better than an ESP_ERROR_CHECK abort —
-     * in production the network stack must survive a temporary loss of the slave. */
+    /* rbamp_begin may return NACK / VERSION on bus chatter or a cold
+     * boot of the module. A soft retry is better than an ESP_ERROR_CHECK
+     * abort — in production the network stack must survive a temporary
+     * loss of the slave. */
     while (rbamp_begin(dev) != ESP_OK) {
         ESP_LOGE(TAG, "rbamp_begin: %s — retry in 1 s",
                  rbamp_err_to_str(rbamp_last_error(dev)));
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    /* set_sensor_class + set_ct_model — both block for ~700 ms
-     * (a CMD_SAVE_GAINS flash write). Log failures, but do not abort —
-     * on v1.0/v1.1 firmware set_sensor_class is effectively a no-op
-     * (the register exists but the firmware does not use it), on v1.2+
-     * it is a mandatory prerequisite for set_ct_model. */
+    /* set_sensor_class + set_ct_model — both block ~700 ms
+     * (flash write). set_sensor_class is a mandatory prerequisite
+     * for set_ct_model. Log failures, but do not abort. */
     esp_err_t err;
     if ((err = rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013)) != ESP_OK) {
         ESP_LOGE(TAG, "set_sensor_class: %s", rbamp_err_to_str(err));
@@ -134,7 +133,7 @@ void app_main(void) {
         .broker.address.uri  = MQTT_URI,
         .credentials.client_id = DEVICE_ID,
         .session.keepalive   = 60,
-        .buffer.size         = 1024,    /* enough for one discovery payload */
+        .buffer.size         = 1024,    /* room for one discovery payload */
     };
     mqtt = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_register_event(mqtt, MQTT_EVENT_CONNECTED,
@@ -168,18 +167,18 @@ void app_main(void) {
 }
 ```
 
-The full project is at [`examples/ha_discovery/`](../examples/ha_discovery/).
+Full project — [`examples/ha_discovery/`](../examples/ha_discovery/).
 
-### The result in HA
+### Result in HA
 
-A few seconds after the first publication, HA automatically creates a
+A few seconds after the first publish, HA automatically creates the
 "Mains rbAmp" device with 6 sensors (Voltage, Current, Power, Energy,
 Frequency, Power Factor). The Energy sensor has
-`state_class: total_increasing` and the correct `device_class` — the
-HA Energy Dashboard accepts it as a consumption source.
+`state_class: total_increasing` and the correct `device_class` —
+the HA Energy Dashboard accepts it as a consumption source.
 
 To remove the device from HA later, publish an empty payload to
-`homeassistant/sensor/.../config` (the retained flag clears the record).
+`homeassistant/sensor/.../config` (the retained flag clears the entry).
 
 ### Multi-channel UI3
 
@@ -190,20 +189,20 @@ channels 1 and 2:
 publish_discovery_sensor("current_1", "Current 1", "A",  "current", "measurement");
 publish_discovery_sensor("power_1",   "Power 1",   "W",  "power",   "measurement");
 publish_discovery_sensor("energy_1",  "Energy 1",  "Wh", "energy",  "total_increasing");
-/* ...the same for _2 */
+/* ...same for _2 */
 ```
 
-And extend the state JSON with the `"current_1"`, `"power_1"`,
-`"energy_1"` fields, populated from `rbamp_read_current(dev, 1, &i)` /
+And extend the state JSON with `"current_1"`, `"power_1"`,
+`"energy_1"` fields, filled in from `rbamp_read_current(dev, 1, &i)` /
 `snap.avg_p[1]` / `rbamp_energy_wh(dev, 1)`.
 
 ---
 
-## ESPHome — an alternative via external_components
+## ESPHome — alternative via external_components
 
 If you use ESPHome (rather than bare ESP-IDF), there is a dedicated
-`rbamp` external component that **replaces this component entirely** and
-does its own HA integration through the ESPHome native API:
+`rbamp` external component that **replaces this component entirely**
+and handles its own HA integration through the ESPHome native API:
 
 ```yaml
 external_components:
@@ -214,7 +213,7 @@ external_components:
 i2c:
   sda: 21
   scl: 22
-  frequency: 50kHz       # see 10 · Troubleshooting about baseline mitigation
+  frequency: 50kHz       # see 10 · Troubleshooting on baseline mitigation
 
 sensor:
   - platform: rbamp
@@ -234,19 +233,19 @@ sensor:
       name: "rbAmp Power Factor"
 ```
 
-ESPHome integrates natively with HA through the ESPHome API (not MQTT) —
-the device appears in HA automatically after flashing.
+ESPHome integrates natively with HA through the ESPHome API (not
+MQTT) — the device appears in HA automatically once flashed.
 
-The `rbamp-esphome` component lives in a separate repository — see the
-[main rbAmp index](https://github.com/rb-amp/rbamp) for links. Use
-ESPHome **instead of** this component; mixing ESPHome and bare ESP-IDF
-in one project is usually not worthwhile.
+The `rbamp-esphome` component lives in a separate repository — see
+the [main rbAmp index](https://github.com/rbamp/rbamp) for links.
+Use ESPHome **instead of** this component; mixing ESPHome and bare
+ESP-IDF in the same project is usually not worthwhile.
 
 ---
 
 ## Node-RED
 
-Subscribe to the ESP32's MQTT topic in a flow:
+Subscribe to the ESP32 MQTT topic in a flow:
 
 ```json
 [
@@ -273,21 +272,21 @@ Subscribe to the ESP32's MQTT topic in a flow:
 ]
 ```
 
-Connect `rbamp_in → extract_power → rbamp_chart` and you get a
+Wire up `rbamp_in → extract_power → rbamp_chart` and you get a
 real-time power chart. Do the same for energy / voltage / PF.
 
-If Node-RED runs on the same Pi as the MQTT broker, set the host to
-`localhost`. For remote brokers, use `192.168.X.Y:1883` plus
+If Node-RED runs on the same Pi as the MQTT broker, use the host
+`localhost`. For remote brokers use `192.168.X.Y:1883` plus
 credentials if the broker requires auth.
 
 The ESP32 side is the same sketch as in the Home Assistant section
-above; the JSON payload is shared and only the consumer differs.
+above; the JSON payload is shared — only the consumer differs.
 
 ---
 
 ## OpenHAB
 
-OpenHAB 4.x + the MQTT binding:
+OpenHAB 4.x + MQTT binding:
 
 ```text
 # things/rbamp.things
@@ -311,16 +310,16 @@ Number:Energy            rbAmp_Energy  "Energy  [%.3f Wh]" <energy> { channel="m
 ```
 
 The ESP32 side is the same project as in the Home Assistant section
-above. The JSON payload is shared and only the consumer differs.
+above. The JSON payload is shared — only the consumer differs.
 
 ---
 
 ## Domoticz
 
 The MQTT Auto-discovery plugin in Domoticz understands the same
-`homeassistant/...` discovery topics. Enable the plugin in the Domoticz
-settings, and the ESP32 project from the HA section above will start
-registering a device in Domoticz automatically, just as it does in HA.
+`homeassistant/...` discovery topics. Enable the plugin in the
+Domoticz settings and the ESP32 project from the HA section above will
+automatically register the device in Domoticz, just as it does in HA.
 
 An alternative is the native Domoticz HTTP API via `esp_http_client`:
 
@@ -357,7 +356,7 @@ publish_to_domoticz(123 /* your idx */, snap.avg_p[0], rbamp_energy_wh(dev, 0));
 ```
 
 Create a device in the Domoticz UI of type **General → kWh**
-(incremental counter), get its idx, and hard-code it into the project.
+(incremental counter), get its idx, and hardcode it into the project.
 
 ---
 
@@ -414,7 +413,8 @@ if (rbamp_read_period_snapshot(dev, &snap, 50, false) == ESP_OK && snap.valid) {
 }
 ```
 
-In Grafana, add an InfluxDB data source, then a panel with a Flux query:
+In Grafana, add an InfluxDB datasource, then a panel with a Flux
+query:
 
 ```text
 from(bucket: "energy")
@@ -425,9 +425,9 @@ from(bucket: "energy")
 
 For a long-running soak deployment, additionally push a diagnostic
 payload to a separate measurement carrying the heap level (via
-`esp_get_free_heap_size()`) and counters of successful / failed period
-snapshots — this lets you watch the health of the bus + WiFi on the
-same chart as the energy data:
+`esp_get_free_heap_size()`) and counters of successful / failed
+period snapshots — this lets you watch bus + WiFi health on the same
+chart as the energy data:
 
 ```c
 snprintf(body, sizeof(body),
@@ -439,8 +439,8 @@ snprintf(body, sizeof(body),
 ```
 
 > **Note**: the component's internal retry/sanity counters are not
-> exposed in the public API (see [10 · Troubleshooting](10_troubleshooting.md),
-> "About retry/sanity counters"). Count `snap_ok_count` / `snap_fail_count`
+> exposed in the public API (see [10 · Troubleshooting](10_troubleshooting.md)
+> "On retry/sanity counters"). Count `snap_ok_count` / `snap_fail_count`
 > yourself on the application side from the return values of
 > `rbamp_read_period_snapshot()`.
 
@@ -451,26 +451,22 @@ snprintf(body, sizeof(body),
 If you need HA Auto-discovery, InfluxDB, and Node-RED all at once,
 publish the state JSON once to MQTT and let each consumer subscribe to
 `rbamp/+/state`. The ESP32 talks only to the MQTT broker — the broker
-itself fans out to the subscribers. Do not push from the ESP32 into N
-HTTP endpoints directly: that couples the device to specific consumers.
+itself fans out to subscribers. Don't push from the ESP32 to N HTTP
+endpoints directly: that couples the device to specific consumers.
 
-For a very fast stream (5 Hz RT), run a sidecar Python script on the Pi
-that hosts the broker — subscribe to the fast topic, decimate, and
-publish to the slow topics. The ESP32's I²C loop (a FreeRTOS task with
-`rbamp_read_*()` calls) should stay focused, free of HTTP overhead.
+For a very high-rate stream (5 Hz RT), run a sidecar Python script on
+the Pi alongside the broker — subscribe to the fast topic, decimate,
+and republish to the slow topics. The ESP32 I²C loop (a FreeRTOS task
+with `rbamp_read_*()` calls) should stay focused, free of HTTP
+overhead.
 
 ---
 
 ## Links
 
-- [06 · Examples](06_examples.md) — the base projects that these
-  integrations are built on (including `mqtt_publisher` and `ha_discovery`)
+- [06 · Examples](06_examples.md) — the base projects these
+  integrations build on (including `mqtt_publisher` and `ha_discovery`)
 - [08 · Cloud integrations](08_cloud_integrations.md) — AWS IoT /
   Azure / GCP / InfluxDB Cloud / generic webhook
 - [10 · Troubleshooting](10_troubleshooting.md) — patterns for
-  MQTT disconnect, the WiFi event handler, the TLS heap budget
-
-
----
-
-[← Examples](06_examples.md) | [Contents](README.md) | [Cloud Integrations →](08_cloud_integrations.md)
+  MQTT disconnect, WiFi event handler, TLS heap budget

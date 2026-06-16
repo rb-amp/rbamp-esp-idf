@@ -1,12 +1,36 @@
-# 08 · Cloud Integrations
+# 08 · Cloud integrations
 
-How to push `rbamp` readings to cloud platforms — AWS IoT
+How to send `rbamp` readings to cloud platforms — AWS IoT
 Core, Azure IoT Hub, Google Cloud, and serverless / managed
 observability pipelines. For each platform: how to set up the
-ESP-IDF project plus what to configure on the cloud side.
+ESP-IDF project plus what you need to configure on the cloud side.
 
 Self-hosted DIY platforms (Home Assistant, Node-RED, InfluxDB OSS)
-are covered in [07 · DIY Integrations](07_diy_integrations.md).
+— see [07 · DIY integrations](07_diy_integrations.md).
+
+### Fleet → per-module MQTT topics
+
+In the canonical deployment (mains + N sub-loads on one bus), the
+master publishes readings on **a separate topic for each module**.
+A convenient pattern is to iterate over the fleet using either the
+module's address or its user-defined `LABEL`:
+
+```c
+char topic[64];
+for (size_t i = 0; i < rbamp_fleet_count(fleet); ++i) {
+    rbamp_handle_t dev = rbamp_fleet_get(fleet, i);
+    char label[9]; rbamp_read_label(dev, label);
+    snprintf(topic, sizeof topic, "rbamp/%s/snapshot",
+             label[0] ? label : "unlabeled");
+    /* publish snaps[i] as JSON to topic */
+}
+```
+
+Additional topics: `rbamp/<label>/error` (driven by `rbamp_has_error`),
+`rbamp/fleet/total_power`, `rbamp/fleet/total_energy_wh`,
+`rbamp/fleet/balance` (mains − Σ(sub-loads) in the canonical
+80% scenario). A full example with retained payloads and Home Assistant
+auto-discovery is in chapter [06 · Examples](06_examples.md), scenario 1.
 
 | Cloud | Transport | Auth | Latency | Cost |
 |---|---|---|---|---|
@@ -14,21 +38,20 @@ are covered in [07 · DIY Integrations](07_diy_integrations.md).
 | Azure IoT Hub | MQTT/TLS or AMQP | SAS token | low | $0.40-2/M messages |
 | Google Cloud IoT (deprecated 2023) | MQTT/TLS | JWT | — | n/a |
 | InfluxDB Cloud | HTTPS line-protocol | API token | medium | $250/mo+ |
-| Generic webhook / REST | HTTPS POST | API key | high | varies |
+| Generic webhook / REST | HTTPS POST | API key | high | depends |
 
 > ⚠ **TLS on ESP32.** Any cloud transport over TLS adds
-> ~30 kB of code + ~30 kB of heap per handshake. On very small
-> targets with limited memory (the ESP32-C2 in particular, when
-> Bluetooth is enabled) the heap for TLS can be a problem — see
+> ~30 kB of code + ~30 kB of heap per handshake. On very small targets
+> with limited memory (the ESP32-C2 in particular, especially with
+> Bluetooth enabled) the TLS heap can be a problem — see
 > [10 · Troubleshooting](10_troubleshooting.md), section "TLS handshake fail".
 
 ## TLS certificates — file-based pattern via SPIFFS
 
-Unlike the Arduino library, where certificates are usually embedded
-into the firmware as PROGMEM strings, ESP-IDF favors a **file-based
-approach**: cert files are placed in a dedicated SPIFFS partition,
-and a URI of the form `file:///certs/aws_root_ca.pem` is passed into
-the config.
+Unlike the Arduino library, where certificates are usually embedded in
+the firmware via PROGMEM strings, ESP-IDF prefers a **file-based
+approach**: cert files are placed in a dedicated SPIFFS partition, and a
+URI of the form `file:///certs/aws_root_ca.pem` is passed to the config.
 
 ### Partition table
 
@@ -49,9 +72,9 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 ```
 
-### SPIFFS image with the certificates
+### SPIFFS image with certificates
 
-Put the cert files in a `spiffs_image/` directory next to `main/` and
+Place the cert files in a `spiffs_image/` directory next to `main/` and
 enable image generation in `main/CMakeLists.txt`:
 
 ```cmake
@@ -61,7 +84,7 @@ idf_component_register(
     REQUIRES rbamp mqtt esp_http_client nvs_flash esp_wifi esp_event esp_netif
 )
 
-# SPIFFS image with the certificates — built at build time and flashed into
+# SPIFFS image with certificates — built at build-time and flashed into
 # the "certs" partition by one of the `idf.py spiffs-certs-flash` commands.
 spiffs_create_partition_image(certs
     ${CMAKE_SOURCE_DIR}/spiffs_image
@@ -69,9 +92,8 @@ spiffs_create_partition_image(certs
 )
 ```
 
-After `idf.py build flash`, the files from `spiffs_image/*` reside in
-the `certs` partition and are accessible through VFS at
-`/certs/<filename>`.
+After `idf.py build flash`, the files from `spiffs_image/*` live in the
+`certs` partition and are accessible via VFS under `/certs/<filename>`.
 
 ### Mounting at runtime
 
@@ -85,7 +107,7 @@ esp_vfs_spiffs_conf_t spiffs_cfg = {
 ESP_ERROR_CHECK(esp_vfs_spiffs_register(&spiffs_cfg));
 ```
 
-After this, the `"file:///certs/ca.pem"` URI can be passed into
+After this, the `"file:///certs/ca.pem"` URI can be passed to
 `esp_mqtt_client_config_t.broker.verification.certificate_uri` and
 similar fields.
 
@@ -98,16 +120,16 @@ AWS IoT Core uses mutual TLS with an X.509 device certificate.
 ### Provisioning
 
 1. AWS Console → **IoT Core → Manage → Things → Create things → Single thing**.
-2. Generate a certificate + keys; download `device.cert.pem`,
-   `device.private.key`, and `AmazonRootCA1.pem`.
-3. Attach a policy that allows `iot:Connect` and `iot:Publish`
+2. Generate the certificate + keys; download `device.cert.pem`,
+   `device.private.key`, `AmazonRootCA1.pem`.
+3. Attach a policy that allows `iot:Connect`, `iot:Publish`
    on `arn:aws:iot:<region>:<acc>:topic/rbamp/+/state`.
 4. Note the AWS IoT endpoint:
    `xxxxxx-ats.iot.<region>.amazonaws.com:8883`.
 
 ### Cert files in SPIFFS
 
-Put these in `spiffs_image/`:
+Place in `spiffs_image/`:
 
 ```text
 spiffs_image/
@@ -135,7 +157,7 @@ static const char *TAG = "aws_iot";
 static esp_mqtt_client_handle_t mqtt;
 
 void app_main(void) {
-    /* ...nvs + netif + wifi STA until IP_EVENT_STA_GOT_IP... */
+    /* ...nvs + netif + wifi STA until IP_EVENT_STA_GOT_IP is received... */
     /* ...mount SPIFFS at /certs (see the TLS certificates section above)... */
     /* ...I²C bus + rbamp_new + rbamp_begin + set_sensor_class + set_ct_model... */
     rbamp_handle_t dev = NULL;
@@ -173,30 +195,30 @@ void app_main(void) {
 }
 ```
 
-### Handling on the cloud side
+### Processing on the cloud side
 
 - Create an **IoT Rule**:
   `SELECT *, topic(2) AS device FROM 'rbamp/+/state'` → Kinesis
   Data Firehose or Lambda for storage.
-- For dashboards — AWS IoT SiteWise (industrial historian) or
+- For dashboards, use AWS IoT SiteWise (industrial historian) or
   Timestream (time-series DB) → QuickSight.
 - If Home Assistant runs on a Pi and consumes data from AWS,
   set up a local Mosquitto bridge (cheaper and faster than HA →
   AWS directly).
 
-### About cost
+### On cost
 
-Publishing once per minute per device, AWS IoT amounts to ~525 k
+Publishing once per minute per device, AWS IoT comes to ~525k
 messages per year → ~$2.60/year/device on the "Connectivity" +
-"Messaging" tariff (2026, us-east-1). Timestream / Lambda costs
-are separate.
+"Messaging" tier (2026, us-east-1). Timestream / Lambda cost
+is separate.
 
 ---
 
 ## Azure IoT Hub
 
 Azure IoT Hub supports MQTT 3.1.1 over TLS with SAS-token auth
-(simpler than X.509 for home use).
+(simpler than X.509 for home use cases).
 
 ### Provisioning
 
@@ -209,7 +231,7 @@ Azure IoT Hub supports MQTT 3.1.1 over TLS with SAS-token auth
 
 ### Cert + config
 
-Put the Azure root CA (Baltimore CyberTrust Root or DigiCert
+Place the Azure root CA (Baltimore CyberTrust Root or DigiCert
 Global Root G2) in `spiffs_image/ca.pem`.
 
 ```c
@@ -233,16 +255,16 @@ snprintf(topic, sizeof(topic), "devices/%s/messages/events/", AZ_DEVICE_ID);
 esp_mqtt_client_publish(mqtt, topic, payload, 0, /*qos*/0, /*retain*/0);
 ```
 
-### SAS token expiry
+### SAS-token expiry
 
-SAS tokens carry an `expiry` claim — typical lifetimes range from 1
-hour to 1 year. For an ESP32 deployment, generate a 1-year token on
-the build machine and embed it in the firmware. For automatic
-unattended rotation, refresh it periodically through the Azure IoT
-Hub Device Provisioning Service (DPS); that is beyond the scope of
-this component.
+SAS tokens carry an `expiry` claim — typical lifetimes range from 1 hour
+to 1 year. For an ESP32 deployment, generate a 1-year token on the
+build machine and burn it into the firmware. For automatic
+unattended rotation, refresh it periodically via the Azure IoT Hub
+Device Provisioning Service (DPS); that is beyond the scope of the
+component.
 
-### Handling on the cloud side (Azure)
+### Processing on the cloud side (Azure)
 
 - Route messages to **Event Hubs** for high-throughput
   ingestion → Stream Analytics → Power BI dashboards.
@@ -256,16 +278,16 @@ this component.
 Google shut down Cloud IoT Core in 2023. Migration paths:
 
 - **MQTT broker on Compute Engine** (you deploy Mosquitto in a VM
-  yourself) — the same pattern as in the Home Assistant section of
-  [07 · DIY Integrations](07_diy_integrations.md), but pointing at
-  the public IP of your VM.
+  yourself) — the same pattern as in
+  [07 · DIY integrations](07_diy_integrations.md), Home
+  Assistant section, but pointing at the public IP of your VM.
 - **HiveMQ Cloud / EMQX Cloud** — managed MQTT brokers, ~$10-20/mo
   on hobbyist tiers.
 - **Pub/Sub over HTTPS** — publish directly to a Pub/Sub topic
-  via the REST API (auth via a service-account JSON key embedded in
+  via the REST API (auth via a service-account JSON key, embedded in
   the ESP32).
 
-For Pub/Sub HTTPS, see the "Generic webhook / REST" section below,
+For Pub/Sub over HTTPS, see the "Generic webhook / REST" section below,
 substituting the Pub/Sub publish endpoint.
 
 ---
@@ -273,11 +295,11 @@ substituting the Pub/Sub publish endpoint.
 ## InfluxDB Cloud (TLSv1.3 + line-protocol)
 
 InfluxDB Cloud (Serverless tier) accepts line-protocol over
-HTTPS — the same shape as the OSS path in the InfluxDB OSS section
-of [07 · DIY Integrations](07_diy_integrations.md), but with
-`cloud2.influxdata.com` as the host and an API token for auth.
+HTTPS — the same form as the OSS path in
+[07 · DIY integrations](07_diy_integrations.md), InfluxDB OSS section,
+but with `cloud2.influxdata.com` as the host and an API token for auth.
 
-Put the CA for cloud2.influxdata.com (DigiCert Global Root G2 or
+Place the CA for cloud2.influxdata.com (DigiCert Global Root G2 or
 similar) in `spiffs_image/influx_ca.pem`.
 
 ```c
@@ -317,7 +339,7 @@ static void push_influx_cloud(float u, float p, double e_wh) {
         .url        = INFLUX_URL,
         .method     = HTTP_METHOD_POST,
         .cert_pem   = ca_buf,
-        .timeout_ms = 10000,    /* the TLS handshake can take up to 3 s */
+        .timeout_ms = 10000,    /* TLS handshake may take up to 3 s */
     };
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     esp_http_client_set_header(client, "Authorization", "Token " INFLUX_TOKEN);
@@ -340,17 +362,17 @@ push_influx_cloud(u, snap.avg_p[0], rbamp_energy_wh(dev, 0));
 ```
 
 The free InfluxDB Cloud tier (5 GB / 30-day retention) covers
-~5,000 points per day at a one-minute cadence — generous for home
-use.
+~5,000 points at a one-minute cadence per day — generous for home
+use cases.
 
 ---
 
 ## Generic webhook / REST
 
 Publishing to any HTTPS endpoint with an API key — works with
-IFTTT webhooks, custom Flask / FastAPI services, or any cloud
-function (AWS Lambda / Azure Functions / GCP Cloud Run) exposed
-as HTTPS.
+IFTTT webhooks, custom Flask / FastAPI services, or any
+cloud function (AWS Lambda / Azure Functions / GCP Cloud Run)
+exposed over HTTPS.
 
 ```c
 #include "esp_http_client.h"
@@ -362,8 +384,8 @@ as HTTPS.
 
 static const char *TAG = "webhook";
 
-/* CA for your HTTPS endpoint (loaded from /certs/webhook_ca.pem,
- * read via snprintf+fopen as in push_influx_cloud). */
+/* CA for your HTTPS endpoint (read from /certs/webhook_ca.pem,
+ * via snprintf+fopen as in push_influx_cloud). */
 extern const char *get_server_ca(void);   /* implementation as in the InfluxDB section */
 
 static void push_webhook(float u, float p, double e_wh) {
@@ -395,23 +417,23 @@ static void push_webhook(float u, float p, double e_wh) {
 ```
 
 > ⚠ **`.skip_cert_common_name_check = false`** must stay
-> false for production. During prototyping you may use
-> `.use_global_ca_store = true` (the binary ships without a
-> specific CA, which lowers TLS security) — NEVER ship that to
+> false for production. During prototyping you can use
+> `.use_global_ca_store = true` (the binary ships without a specific CA,
+> which lowers TLS security) — but NEVER ship that to
 > production without an explicit CA.
 
-At a low rate (≤ once per minute) the overhead is acceptable. At
+At a low rate (≤ once per minute), the overhead is acceptable. At
 higher rates, batch the data on the ESP32 side (accumulate 10
-minutes in a ring buffer, publish as a single bulk JSON) so you
-don't pay a TLS handshake per request.
+minutes in a ring buffer, then publish as one bulk JSON) so you don't
+pay for a TLS handshake per request.
 
 ---
 
-## Hybrid: local storage + sync to the cloud
+## Hybrid: local storage + sync to cloud
 
-For offline-tolerant deployments: log to SPIFFS once a minute and
-send to the cloud once an hour. Survives WiFi drops without losing
-data.
+For offline-tolerant deployments: log to SPIFFS once per minute and
+push to the cloud once per hour. This survives WiFi outages without
+losing data.
 
 ```c
 #include <stdio.h>
@@ -438,7 +460,7 @@ static void log_to_spiffs(const rbamp_period_snapshot_t *snap,
 static void sync_to_cloud_if_due(void) {
     static int64_t last_sync_us = 0;
     const int64_t now_us = esp_timer_get_time();
-    if ((now_us - last_sync_us) < 3600LL * 1000000LL) return;   /* once an hour */
+    if ((now_us - last_sync_us) < 3600LL * 1000000LL) return;   /* once per hour */
     last_sync_us = now_us;
 
     FILE *f = fopen(LOG_PATH, "r");
@@ -453,8 +475,8 @@ static void sync_to_cloud_if_due(void) {
 ```
 
 The component's accumulator `rbamp_energy_wh(dev, 0)` keeps counting
-throughout the offline window — no data is lost as long as the ESP32
-is powered. The `storage` SPIFFS partition is shown in
+throughout the offline window — no data is lost as long as the ESP32 is
+powered. The `storage` SPIFFS partition is shown in
 [06 · Examples](06_examples.md), Scenario 8 (spiffs_logger).
 
 ---
@@ -466,14 +488,14 @@ connection. For deep-sleep loggers (see
 [06 · Examples](06_examples.md), Scenario 9):
 
 - **Reuse the TLS session** if the sleep interval is < 24 h —
-  ESP-IDF `mbedtls` supports session resumption through the
-  `mbedtls_ssl_get/set_session()` API. This cuts the handshake to
+  the ESP-IDF `mbedtls` supports session resumption via the
+  `mbedtls_ssl_get/set_session()` API. This shortens the handshake to
   ~500 ms.
-- **Batch** several measurements onto local SPIFFS into a single bulk
+- **Batch** several measurements to local SPIFFS into a single bulk
   POST per wake — the pattern from the "Hybrid" section above.
 - **MQTT-over-TLS with a persistent session** (`session.disable_clean_session
   = true` in `esp_mqtt_client_config_t`) — the broker remembers your
-  subscriptions between wakes, so there's no need to re-publish the
+  subscriptions between wakes, so you don't need to re-publish the
   discovery config.
 
 At a 10-minute wake interval on a 2000 mAh Li-ion cell, expect ~3
@@ -482,17 +504,12 @@ MQTT (per the Scenario 9 budget).
 
 ---
 
-## References
+## See also
 
 - [06 · Examples](06_examples.md) — the base projects that the cloud
   integrations build on (especially Scenario 8 "spiffs_logger"
   for the hybrid approach)
-- [07 · DIY Integrations](07_diy_integrations.md) — self-hosted
+- [07 · DIY integrations](07_diy_integrations.md) — self-hosted
   alternatives (Home Assistant / Node-RED / OpenHAB / InfluxDB OSS)
-- [10 · Troubleshooting](10_troubleshooting.md) — WiFi drops /
-  debugging the TLS handshake / heap problems
-
-
----
-
-[← DIY Integrations](07_diy_integrations.md) | [Contents](README.md) | [API Reference →](09_api_reference.md)
+- [10 · Troubleshooting](10_troubleshooting.md) — WiFi dropouts /
+  TLS handshake debugging / heap issues
