@@ -452,10 +452,13 @@ configuration to flash).
 ### `rbamp_read_variant`
 
 ```c
-esp_err_t rbamp_read_variant(rbamp_handle_t dev, uint8_t *out);
+esp_err_t rbamp_read_variant(rbamp_handle_t dev, rbamp_variant_t *out);
 ```
 
-Reads the module's `HW_VARIANT (0x55)` register. Values:
+Reads the `HW_VARIANT (0x55)` register and maps it into the
+`rbamp_variant_t` enum (`RBAMP_VARIANT_UI1` / `_I1` / `_I2` / `_I3`,
+etc.). For compatibility with older code that reads the "raw" byte,
+you can cast it back to `uint8_t`. Values:
 
 | Code | SKU | I channels | U channel |
 |---|---|---|---|
@@ -872,11 +875,11 @@ monitoring.
 ### Aggregation
 
 ```c
-esp_err_t rbamp_fleet_total_power(rbamp_fleet_t fleet, float *out);
-esp_err_t rbamp_fleet_total_energy_wh(rbamp_fleet_t fleet, double *out);
+esp_err_t rbamp_fleet_total_power(rbamp_fleet_t fleet, float *out_w);
+esp_err_t rbamp_fleet_total_energy_wh(rbamp_fleet_t fleet, double *out_wh);
 esp_err_t rbamp_fleet_poll_errors(rbamp_fleet_t fleet,
-                                  bool *any_error,
-                                  size_t *first_idx);
+                                  uint32_t *error_mask,
+                                  size_t *n_errors);
 ```
 
 `_total_power` sums the active power across all channels of all
@@ -889,9 +892,11 @@ also works correctly: I variants contribute `0`, UI1 contributes
 billing energy.
 
 `_poll_errors` iterates over the fleet, calling `rbamp_has_error` on
-each module; it returns `true` via `*any_error` if at least one
-module reported `EVENT bit3`. `*first_idx` points to the first
-faulted module.
+each module. `*error_mask` is a bitmask of the modules flagged with
+`EVENT bit3`, by their position in the fleet (meaningful for the
+first 32 modules); `*n_errors` is the total number of modules with an
+error flag at the moment of polling. Either pointer may be passed as
+`NULL` if not needed.
 
 ### Addressing and conflict checking
 
@@ -900,20 +905,24 @@ esp_err_t rbamp_fleet_assign_address(rbamp_fleet_t fleet,
                                      rbamp_handle_t dev,
                                      uint8_t new_addr);
 esp_err_t rbamp_fleet_check_conflict(rbamp_fleet_t fleet,
-                                     uint8_t *out_conflicts,
-                                     size_t  *n_found);
+                                     uint8_t addr,
+                                     bool *collision);
 ```
 
 `_assign_address` re-addresses an existing fleet module to a new
 address: internally — two-phase commit + reset; the handle in the
 fleet is updated automatically (subsequent calls keep working).
 
-`_check_conflict` — a best-effort read-only check: it tries to read
-identity at all known addresses, looking for inconsistencies (the
-same identity at different addresses, a mismatch between the fleet's
-cached state and the actual response). It returns a list of
-suspicious addresses. It does **not guarantee** catching identical
-modules — see the provisioning discipline.
+`_check_conflict` — a best-effort read-only check **for a specific
+address**: call it once per address of interest. It reads identity
+(`PRODUCT_ID` / `HW_VARIANT` / `CAPABILITY`) and compares it against
+the fleet's cached state. If an inconsistency is detected (two
+devices answering on the same address with "merged" bytes; identity
+differing from the cached state) — `*collision = true`. To sweep all
+known addresses, iterate over the fleet yourself: `for i in
+0..count, check_conflict(fleet, addr, &col)`. It does **not
+guarantee** catching identical modules — see the provisioning
+discipline.
 
 ### Provisioning — `rbamp_provision`
 
@@ -950,14 +959,17 @@ the specified address. Internally:
 
 ```c
 esp_err_t rbamp_fleet_enable_gc_all(rbamp_fleet_t fleet,
-                                    uint8_t group_id);
+                                    uint8_t group,
+                                    size_t *ok_count);
 esp_err_t rbamp_fleet_gclatch(rbamp_fleet_t fleet,
-                              uint8_t group_id,
-                              uint16_t tick);
+                              uint8_t group,
+                              uint16_t tick,
+                              uint32_t settle_ms);
 esp_err_t rbamp_fleet_check_sync(rbamp_fleet_t fleet,
                                  uint16_t expected_tick,
-                                 bool *all_in_sync,
-                                 size_t *missed_idx);
+                                 rbamp_fleet_sync_t *status,
+                                 size_t status_cap,
+                                 size_t *n_missed);
 ```
 
 For billing-grade snapshot synchrony (skew < 1 ms across the whole
@@ -967,14 +979,26 @@ fleet) an I²C General-Call broadcast latch is used.
    modules in the fleet and issues `CMD_SAVE_USER_CONFIG` on each
    (persistent). A reboot of the modules is **mandatory** after
    enable — this is done automatically. It is enough to call it once
-   during the initial fleet setup.
+   during the initial fleet setup. `*ok_count` (optional) is the
+   number of modules for which enable succeeded.
 2. `_gclatch` sends the GC frame `A5 27 group tick_lo tick_hi` to
    address `0x00` — all modules with GC enabled and a matching
-   group_id instantly perform `LATCH_PERIOD`.
-3. `_check_sync` verifies that all modules' `GC_TICK (0x59)` matches
-   the expected `expected_tick` — if some module missed the frame
-   (for example, it was busy booting), it did not latch.
-   `*missed_idx` is the index of the first module that missed.
+   `group` instantly perform `LATCH_PERIOD`. `settle_ms` is the pause
+   after the frame (typically 50 ms) before verification.
+3. `_check_sync` reads `GC_TICK (0x59)` on each module into
+   `rbamp_fleet_sync_t status[status_cap]`. The per-module result:
+
+   ```c
+   typedef struct {
+       uint8_t  addr;        /* module I²C address */
+       uint16_t gc_tick;     /* REG_GC_TICK; 0xFFFF = never received a GC */
+       bool     in_sync;     /* true if gc_tick == expected_tick */
+       bool     reachable;   /* false if the read NACKed / timed out */
+   } rbamp_fleet_sync_t;
+   ```
+
+   `*n_missed` is the number of modules with `in_sync = false` (or
+   simply not responding). If all are `in_sync`, `n_missed == 0`.
 
 > Don't confuse them: the per-device `rbamp_broadcast_latch` (see the
 > "Multi-module bus" section below) is **one** frame across the bus;
@@ -991,14 +1015,16 @@ adding it to a fleet, or want fine-grained control.
 ### `rbamp_enable_gc` / `rbamp_read_fleet_config`
 
 ```c
-esp_err_t rbamp_enable_gc(rbamp_handle_t dev);
+esp_err_t rbamp_enable_gc(rbamp_handle_t dev, bool enable);
 esp_err_t rbamp_read_fleet_config(rbamp_handle_t dev, uint8_t *out);
 ```
 
-`enable_gc` writes `1` to `FLEET_CONFIG.bit0 (0x27)` — the module
-will start accepting GC latches after the next `CMD_SAVE_USER_CONFIG`
-+ reset. `read_fleet_config` returns the current config byte —
-useful for read-back confirmation.
+`enable_gc(dev, true)` writes `1` to `FLEET_CONFIG.bit0 (0x27)` — the
+module will start accepting GC latches after the next
+`CMD_SAVE_USER_CONFIG` + reset. `enable_gc(dev, false)` mirrors this
+by clearing the bit (the module stops accepting GC after reset).
+`read_fleet_config` returns the current config byte — useful for
+read-back confirmation.
 
 ### `rbamp_set_group_id` / `rbamp_read_group_id`
 

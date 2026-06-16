@@ -162,19 +162,23 @@ void app_main(void) {
     }
 
     /* 4) arm GC across the whole fleet */
-    ESP_ERROR_CHECK(rbamp_fleet_enable_gc_all(fleet, /*group=*/0));
+    size_t gc_ok = 0;
+    ESP_ERROR_CHECK(rbamp_fleet_enable_gc_all(fleet, /*group=*/0, &gc_ok));
+    ESP_LOGI(TAG, "enable_gc_all → %u/%u modules armed",
+             (unsigned)gc_ok, (unsigned)rbamp_fleet_count(fleet));
 
     /* 5) loop: gclatch → check_sync → poll_all → energy + totals */
     rbamp_snapshot_t snaps[RBAMP_FLEET_MAX_MODULES];
     rbamp_fleet_poll_t status[RBAMP_FLEET_MAX_MODULES];
+    rbamp_fleet_sync_t sync_status[RBAMP_FLEET_MAX_MODULES];
     uint16_t tick = 0;
 
     while (1) {
-        rbamp_fleet_gclatch(fleet, /*group=*/0, tick);
+        rbamp_fleet_gclatch(fleet, /*group=*/0, tick, /*settle_ms=*/50);
 
-        bool in_sync = false;
-        size_t missed = SIZE_MAX;
-        rbamp_fleet_check_sync(fleet, tick, &in_sync, &missed);
+        size_t n_missed = SIZE_MAX;
+        rbamp_fleet_check_sync(fleet, tick, sync_status,
+                               RBAMP_FLEET_MAX_MODULES, &n_missed);
 
         size_t n_ok = 0;
         rbamp_fleet_poll_all(fleet, snaps, status,
@@ -187,12 +191,12 @@ void app_main(void) {
         rbamp_fleet_total_power(fleet, &p_total);
         rbamp_fleet_total_energy_wh(fleet, &e_total);
 
-        ESP_LOGI(TAG, "ITER %3u: GC in_sync=%s | poll n_ok=%u/%u | "
+        size_t n_total = rbamp_fleet_count(fleet);
+        ESP_LOGI(TAG, "ITER %3u: GC %u/%u in_sync | poll n_ok=%u/%u | "
                        "P_total=%.1f W  E_total=%.3f Wh",
                  (unsigned)tick,
-                 in_sync ? "3/3 skew=0" : "MISS",
-                 (unsigned)n_ok,
-                 (unsigned)rbamp_fleet_count(fleet),
+                 (unsigned)(n_total - n_missed), (unsigned)n_total,
+                 (unsigned)n_ok, (unsigned)n_total,
                  p_total, e_total);
 
         tick++;
@@ -470,20 +474,26 @@ void app_main(void) {
     /* bus init + fleet_create + fleet_scan ... as in Sc.1 */
 
     /* Step 1: enable GC on all modules in the fleet. */
-    ESP_ERROR_CHECK(rbamp_fleet_enable_gc_all(fleet, /*group_id=*/0));
-    ESP_LOGI(TAG, "GC armed");
+    size_t gc_ok = 0;
+    ESP_ERROR_CHECK(rbamp_fleet_enable_gc_all(fleet, /*group=*/0, &gc_ok));
+    ESP_LOGI(TAG, "GC armed: %u/%u",
+             (unsigned)gc_ok, (unsigned)rbamp_fleet_count(fleet));
 
+    rbamp_fleet_sync_t sync_status[RBAMP_FLEET_MAX_MODULES];
     uint16_t tick = 0;
     for (int round = 0; round < 10; ++round) {
         /* Step 2: a single broadcast latch — all modules atomically. */
-        ESP_ERROR_CHECK(rbamp_fleet_gclatch(fleet, /*group=*/0, tick));
+        ESP_ERROR_CHECK(rbamp_fleet_gclatch(fleet, /*group=*/0, tick,
+                                            /*settle_ms=*/50));
 
         /* Step 3: in-sync check — all modules caught the same tick. */
-        bool all_in_sync = false;
-        size_t missed_idx = SIZE_MAX;
-        rbamp_fleet_check_sync(fleet, tick, &all_in_sync, &missed_idx);
-        ESP_LOGI(TAG, "round %d  tick=%u  in_sync=%s",
-                 round, tick, all_in_sync ? "3/3" : "MISS");
+        size_t n_missed = 0;
+        rbamp_fleet_check_sync(fleet, tick, sync_status,
+                               RBAMP_FLEET_MAX_MODULES, &n_missed);
+        size_t n_total = rbamp_fleet_count(fleet);
+        ESP_LOGI(TAG, "round %d  tick=%u  in_sync=%u/%u",
+                 round, tick,
+                 (unsigned)(n_total - n_missed), (unsigned)n_total);
 
         tick++;
         vTaskDelay(pdMS_TO_TICKS(100));

@@ -237,7 +237,7 @@ ESPHome integrates natively with HA through the ESPHome API (not
 MQTT) — the device appears in HA automatically once flashed.
 
 The `rbamp-esphome` component lives in a separate repository — see
-the [main rbAmp index](https://github.com/rbamp/rbamp) for links.
+the [main rbAmp index](https://github.com/rb-amp/rbamp) for links.
 Use ESPHome **instead of** this component; mixing ESPHome and bare
 ESP-IDF in the same project is usually not worthwhile.
 
