@@ -17,13 +17,13 @@ void rbamp_energy_init(rbamp_energy_t *e)
 void rbamp_energy_tick(rbamp_energy_t *e,
                        const float avg_p[3],
                        uint8_t channels,
-                       uint32_t master_dt_ms,
+                       uint32_t period_ms,
                        bool valid)
 {
-    if (!e->enabled || !valid || master_dt_ms == 0) {
+    if (!e->enabled || !valid || period_ms == 0) {
         return;
     }
-    const double dt_s = (double)master_dt_ms / 1000.0;
+    const double dt_s = (double)period_ms / 1000.0;
     const uint8_t n = (channels > 3) ? 3 : channels;
     for (uint8_t ch = 0; ch < n; ++ch) {
         /* E_Wh += avg_p_W * dt_s / 3600 — see SPEC §7. */

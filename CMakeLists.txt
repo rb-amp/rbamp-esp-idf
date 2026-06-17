@@ -1,13 +1,14 @@
 # rbAmp ESP-IDF component build descriptor.
 #
 # Drop the component anywhere on your EXTRA_COMPONENT_DIRS, or install via
-# `idf.py add-dependency "rbamp/rbamp^1.2"` once published to the ESP
+# `idf.py add-dependency "rbamp/rbamp^1.3"` once published to the ESP
 # Component Registry. Targets IDF v5.2+ — uses the new `i2c_master` driver.
 
 idf_component_register(
     SRCS
         "src/rbamp.c"
         "src/rbamp_energy.c"
+        "src/rbamp_fleet.c"
     INCLUDE_DIRS
         "include"
     PRIV_INCLUDE_DIRS

@@ -17,8 +17,8 @@
 extern "C" {
 #endif
 
-#define RBAMP_REG_SCHEMA_CRC32    0x53BC3606U
-#define RBAMP_PROTOCOL_VERSION    0x0133U   /* 1.2 */
+#define RBAMP_REG_SCHEMA_CRC32    0x8D38A1C2U
+#define RBAMP_PROTOCOL_VERSION    0x014CU   /* 1.3 */
 
 /* ---- Register addresses ---- */
 #define RBAMP_REG_STATUS                     0x00u
@@ -47,7 +47,10 @@ extern "C" {
 #define RBAMP_REG_TOPOLOGY                   0x24u
 #define RBAMP_REG_SENSOR_CLASS               0x25u
 #define RBAMP_REG_V03_PHASE_FRACT            0x26u
+#define RBAMP_REG_FLEET_CONFIG               0x27u
+#define RBAMP_REG_GROUP_ID                   0x28u
 #define RBAMP_REG_I2C_ADDRESS                0x30u
+#define RBAMP_REG_ADDR_COMMIT_MAGIC          0x31u
 #define RBAMP_REG_TEMP_T_WARN                0x36u
 #define RBAMP_REG_TEMP_T_DERATE              0x37u
 #define RBAMP_REG_TEMP_T_CRIT                0x38u
@@ -65,7 +68,7 @@ extern "C" {
 #define RBAMP_REG_FAN_MODE                   0x52u
 #define RBAMP_REG_FAN_STATUS                 0x53u
 #define RBAMP_REG_CS_CONFIG                  0x54u
-#define RBAMP_REG_CS_INTERVAL_L              0x55u
+#define RBAMP_REG_HW_VARIANT                 0x55u
 #define RBAMP_REG_CS_INTERVAL_H              0x56u
 #define RBAMP_REG_CS0_SENSOR_TYPE            0x57u
 #define RBAMP_REG_ACC_SEL                    0x58u
@@ -179,11 +182,13 @@ extern "C" {
 #define RBAMP_CMD_SET_CT_MODEL_CH0           0x28u
 #define RBAMP_CMD_SET_CT_MODEL_CH1           0x29u
 #define RBAMP_CMD_SET_CT_MODEL_CH2           0x2Au
+#define RBAMP_CMD_COMMIT_ADDR                0x30u
+#define RBAMP_CMD_SAVE_USER_CONFIG           0x32u
 #define RBAMP_CMD_FACTORY_RESET              0xAAu
 
 /* ---- Command settle times (ms) ---- */
 #define RBAMP_SETTLE_MS_NOP                    0u
-#define RBAMP_SETTLE_MS_RESET                  100u
+#define RBAMP_SETTLE_MS_RESET                  300u
 #define RBAMP_SETTLE_MS_RECALIBRATE            200u
 #define RBAMP_SETTLE_MS_SWITCH_UART            50u
 #define RBAMP_SETTLE_MS_CHARGE_RESET           5u
@@ -198,6 +203,8 @@ extern "C" {
 #define RBAMP_SETTLE_MS_SET_CT_MODEL_CH0       5u
 #define RBAMP_SETTLE_MS_SET_CT_MODEL_CH1       5u
 #define RBAMP_SETTLE_MS_SET_CT_MODEL_CH2       5u
+#define RBAMP_SETTLE_MS_COMMIT_ADDR            700u
+#define RBAMP_SETTLE_MS_SAVE_USER_CONFIG       700u
 #define RBAMP_SETTLE_MS_FACTORY_RESET          1500u
 
 /* ---- Device error codes ---- */

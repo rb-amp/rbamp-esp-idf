@@ -1,17 +1,17 @@
 /**
  * @file    main.c
  * @brief   Example 3 — three rbAmp modules on one bus, period-synced via
- *          PER-DEVICE SEQUENTIAL LATCH (broadcast LATCH unavailable in v1).
+ *          PER-DEVICE SEQUENTIAL LATCH (truth-doc §18.5 Strategy 1).
  *
- * v1 firmware caveat (SPEC §9):
- *   The v1 slave firmware disables I²C General-Call and does not respond to
- *   address 0x00. ::rbamp_broadcast_latch therefore returns
- *   @c ESP_ERR_NOT_SUPPORTED without touching the wire. Until v2 enables the
- *   General-Call ISR handler, this example synchronises three modules by
- *   issuing ::rbamp_latch_period to each device in turn and measuring the
- *   per-device skew. Skew at 100 kHz is roughly 200-400 µs per I²C transaction
- *   (write 2 bytes + STOP) — far below the 200 ms RT window, so energy
- *   integration error is < 0.2 % per period.
+ * Sync strategy:
+ *   This example uses per-device sequential @c rbamp_latch_period in a tight
+ *   loop, then one shared settle, then per-device
+ *   @c rbamp_read_period_snapshot with @c skip_latch=true. Skew at 100 kHz
+ *   is roughly 200-400 µs per I²C transaction (write 2 bytes + STOP) — far
+ *   below the 200 ms RT window, so energy integration error is < 0.2 % per
+ *   period. For billing-grade sync (≥ 8 modules) use Strategy 2 — opt each
+ *   module in to GC via @c REG_FLEET_CONFIG bit 0, then call
+ *   ::rbamp_broadcast_latch (truth-doc §5).
  *
  * Demonstrates:
  *   - Multiple rbamp_handle_t sharing the same i2c_master bus.
@@ -21,7 +21,7 @@
  *
  * Each module must have a UNIQUE I²C address; see
  * ::rbamp_prepare_address_change / ::rbamp_commit_address_change for the
- * reassignment flow (factory bench operation — develop mode required).
+ * reassignment flow (production-OK two-phase commit on v1.3).
  *
  * Example output:
  *   sync_us=312  0x50 ok dt=60012 P0=  234W  Wh0=12.345
@@ -78,7 +78,8 @@ void app_main(void)
 
     while (true) {
         /* 1. Sequential LATCH — measure skew so caller knows how much error
-         *    creeps into per-channel dt. v2: replace with broadcast_latch(). */
+         *    creeps into per-channel dt. For ≥8 modules switch to
+         *    rbamp_broadcast_latch() (GC opt-in required, truth-doc §5). */
         const int64_t sync_start_us = esp_timer_get_time();
         for (size_t i = 0; i < N_MODULES; ++i) {
             if (modules[i]) rbamp_latch_period(modules[i]);

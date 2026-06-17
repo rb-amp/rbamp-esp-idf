@@ -31,21 +31,35 @@ void rbamp_energy_init(rbamp_energy_t *e);
 /**
  * @brief Integrate one period snapshot.
  *
- * Skipped silently if @c valid == false, @c master_dt_ms <= 0, or the
- * accumulator is disabled. Master-side formula (SPEC §7):
+ * Skipped silently if @c valid == false, @c period_ms == 0, or the
+ * accumulator is disabled. Formula (SPEC §7):
  *
- *     E_Wh[ch] += avg_p_W * (master_dt_ms / 1000) / 3600
+ *     E_Wh[ch] += avg_p_W * (period_ms / 1000) / 3600
  *
- * @param[in,out] e             Accumulator.
- * @param[in]     avg_p         Per-channel average power for the period (W).
- * @param[in]     channels      Number of valid channels in @c avg_p (1..3).
- * @param[in]     master_dt_ms  Master wall-clock dt since previous valid latch.
- * @param[in]     valid         REG_V03_PERIOD_VALID bit at read time.
+ * @param[in,out] e          Accumulator.
+ * @param[in]     avg_p      Per-channel average power for the period (W).
+ * @param[in]     channels   Number of valid channels in @c avg_p (1..3).
+ * @param[in]     period_ms  Elapsed duration of the billing window (ms). The
+ *                           caller passes the MASTER wall-clock dt computed
+ *                           from @c esp_timer_get_time() across consecutive
+ *                           consumed reads (see ::rbamp_read_period_snapshot,
+ *                           field @c master_dt_ms) — NOT the chip's self-
+ *                           reported period.
+ *                           @note L9 / SPEC E.6 / F10: the device's own
+ *                           REG_V03_PERIOD_LATCH_MS (0xEC) under-counts by
+ *                           ~26% (HW-validated) due to timer-ISR starvation in
+ *                           the module firmware, so it is DIAGNOSTIC-ONLY and
+ *                           must never feed energy integration. A previous revision
+ *                           wrongly used it (OI-3); fixed in 11b2a99. Future
+ *                           porters: do NOT revert this to chip-period — the
+ *                           accumulator is clock-agnostic and the master
+ *                           wall-clock is the billing dt.
+ * @param[in]     valid      REG_V03_PERIOD_VALID bit at read time.
  */
 void rbamp_energy_tick(rbamp_energy_t *e,
                        const float avg_p[3],
                        uint8_t channels,
-                       uint32_t master_dt_ms,
+                       uint32_t period_ms,
                        bool valid);
 
 /** @brief Read running total for one channel (0..2). 0 if out of range. */

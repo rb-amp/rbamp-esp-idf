@@ -2,8 +2,8 @@
  * @file    main.c
  * @brief   Example 7 — battery-friendly periodic logger using ESP32 deep sleep.
  *
- * Canonical v1-firmware deep-sleep pattern (mirrors Arduino library's
- * 07_DeepSleepLogger.ino F-4 fix; documented in docs/06_examples.md Sc9):
+ * Canonical rbAmp deep-sleep pattern (mirrors the Arduino library's
+ * 07_DeepSleepLogger example; documented in docs/06_examples.md Sc9):
  *
  *   - RTC magic-marker (RTC_MAGIC) cold-boot vs warm-wake disambiguation.
  *   - First-wake gate: ::rbamp_begin issues a primer LATCH, capture the
