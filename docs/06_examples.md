@@ -7,26 +7,26 @@ followed by single-module scenarios — from a minimal "hello world"
 to a battery-powered deep-sleep logger.
 
 Most scenarios ship as a ready-to-build IDF project in
-[`examples/`](../examples/), which you can build with
+[`examples/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/), which you can build with
 `idf.py -C examples/<name> build flash monitor`. The code in this
 chapter is a **distillation of the key logic**, not the full project
 (`bus_cfg` / WiFi bring-up / Kconfig are omitted for brevity).
 
 | # | Scenario | Difficulty | Source |
 |:---:|---|:---:|---|
-| **1** | **Mains + N sub-loads — the 80% canon** | medium | [`examples/fleet_sync/`](../examples/fleet_sync/) |
-| **2** | **Provisioning workflow (virgin → fleet)** | low | [`examples/provision/`](../examples/provision/) |
-| **3** | **Multi-channel mixed-CT (I3, different models)** | medium | [`examples/multi_channel/`](../examples/multi_channel/) |
-| **4** | **Fleet GC sync — billing-grade synchronicity** | medium | [`examples/fleet_sync/`](../examples/fleet_sync/) |
-| 5 | Quick read (single module) | minimal | [`examples/quick_read/`](../examples/quick_read/) |
-| 6 | Wh meter on a 16×2 LCD | low | [`examples/lcd_period/`](../examples/lcd_period/) |
-| 7 | Monitoring 3 modules (legacy sequential) | low | [`examples/multi_module/`](../examples/multi_module/) |
-| 8 | MQTT per channel | medium | [`examples/mqtt_publisher/`](../examples/mqtt_publisher/) |
+| **1** | **Mains + N sub-loads — the 80% canon** | medium | [`examples/fleet_sync/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/fleet_sync/) |
+| **2** | **Provisioning workflow (virgin → fleet)** | low | [`examples/provision/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/provision/) |
+| **3** | **Multi-channel mixed-CT (I3, different models)** | medium | [`examples/multi_channel/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/multi_channel/) |
+| **4** | **Fleet GC sync — billing-grade synchronicity** | medium | [`examples/fleet_sync/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/fleet_sync/) |
+| 5 | Quick read (single module) | minimal | [`examples/quick_read/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/quick_read/) |
+| 6 | Wh meter on a 16×2 LCD | low | [`examples/lcd_period/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/lcd_period/) |
+| 7 | Monitoring 3 modules (legacy sequential) | low | [`examples/multi_module/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/multi_module/) |
+| 8 | MQTT per channel | medium | [`examples/mqtt_publisher/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/mqtt_publisher/) |
 | 9 | Bidirectional metering on the master side | medium | (composition) |
 | 10 | Whole-home energy balance (3 modules) | high | (composition) |
 | 11 | Event-based logging (EMA) | medium | (composition) |
-| 12 | Local CSV logger on SPIFFS | medium | [`examples/spiffs_logger/`](../examples/spiffs_logger/) |
-| 13 | Battery logger with deep-sleep | medium | [`examples/deep_sleep_logger/`](../examples/deep_sleep_logger/) |
+| 12 | Local CSV logger on SPIFFS | medium | [`examples/spiffs_logger/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/spiffs_logger/) |
+| 13 | Battery logger with deep-sleep | medium | [`examples/deep_sleep_logger/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/deep_sleep_logger/) |
 | 14 | I3 with different CT per channel (mixed-load deep-dive) | medium | (composition) |
 | 15 | Sub-metering: 5×UI1 on a shared bus | high | (composition) |
 | 16 | GC broadcast latch for >8 modules | high | (composition) |
@@ -64,7 +64,7 @@ Some scenarios use additional ESP-IDF components — add them to the
 
 The networking components also require `nvs_flash_init()` in `app_main`
 and WiFi bring-up. For brevity, all of this is omitted in the snippets
-below; the full project always lives in [`examples/<name>/`](../examples/).
+below; the full project always lives in [`examples/<name>/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/).
 
 > **Important note about the snippets below.** Each snippet is a
 > **distillation of the key logic**, not a full `app_main`. In working
@@ -643,7 +643,7 @@ void app_main(void) {
 }
 ```
 
-The full IDF project — [`examples/lcd_period/`](../examples/lcd_period/).
+The full IDF project — [`examples/lcd_period/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/lcd_period/).
 
 **Handling stale snapshots.** `rbamp_read_period_snapshot()` returns
 `ESP_ERR_INVALID_RESPONSE` if the module did not manage to prepare a
@@ -667,10 +667,16 @@ with their WARNING notes).
 > Inter-device skew at 100 kHz: ~1 ms per device, < 0.2 % of a
 > 60-second period.
 >
-> The `rbamp_broadcast_latch(bus, timeout_ms)` function is reserved
-> for v2 firmware (General-Call is disabled in the v1 module's I²C
-> peripheral) — it returns `ESP_ERR_NOT_SUPPORTED`. See
-> [09 · API Reference](09_api_reference.md) for details.
+> On v1.3 firmware (`REG_VERSION = 0x04`) `rbamp_broadcast_latch()` is
+> fully supported once GC is enabled fleet-wide via
+> `rbamp_fleet_enable_gc_all()` — the canonical fleet-sync path for
+> billing-grade synchronization between sub-meters (see the `Strategy 2`
+> fleet-GC section earlier in this chapter). On legacy v1.0-v1.2
+> firmware (no `CAP_GC_LATCH` capability bit) the call returns
+> `ESP_ERR_NOT_SUPPORTED` and the library falls back to the per-device
+> latch shown above. See
+> [09 · API Reference](09_api_reference.md)
+> for details.
 
 ```c
 #include "freertos/FreeRTOS.h"
@@ -730,7 +736,7 @@ void app_main(void) {
 ```
 
 The full project (with bus-scan probe + error reporting) —
-[`examples/multi_module/`](../examples/multi_module/).
+[`examples/multi_module/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/multi_module/).
 
 ---
 
@@ -783,10 +789,10 @@ void app_main(void) {
 }
 ```
 
-The full project — [`examples/mqtt_publisher/`](../examples/mqtt_publisher/).
+The full project — [`examples/mqtt_publisher/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/mqtt_publisher/).
 For HA MQTT Auto-discovery based on this pattern — see
 [07 · DIY integrations](07_diy_integrations.md) +
-[`examples/ha_discovery/`](../examples/ha_discovery/).
+[`examples/ha_discovery/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/ha_discovery/).
 
 ---
 
@@ -903,8 +909,8 @@ combine with the pattern from Scenario 5 (a separate 5 Hz task on
 `rbamp_read_power(mains_dev, 0, ...)`).
 
 This is a composite scenario with no dedicated IDF project — assemble
-it from [`examples/mqtt_publisher/`](../examples/mqtt_publisher/) +
-[`examples/multi_module/`](../examples/multi_module/).
+it from [`examples/mqtt_publisher/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/mqtt_publisher/) +
+[`examples/multi_module/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/multi_module/).
 
 ---
 
@@ -1024,7 +1030,7 @@ void app_main(void) {
 }
 ```
 
-The full project — [`examples/spiffs_logger/`](../examples/spiffs_logger/).
+The full project — [`examples/spiffs_logger/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/spiffs_logger/).
 The snippet above is a pedagogical simplification with a 4-column CSV
 row. The example itself writes a **9-column** CSV row with per-channel
 `avg_p` and Wh for all 3 channels — more useful for production
@@ -1134,7 +1140,7 @@ void app_main(void) {
 ```
 
 The full project (with WiFi setup, MQTT publish, RTC magic-marker
-guards) — [`examples/deep_sleep_logger/`](../examples/deep_sleep_logger/).
+guards) — [`examples/deep_sleep_logger/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/deep_sleep_logger/).
 
 > 🛣 **Roadmap.** A future version of the component is expected to add
 > `rbamp_warm_begin()` — a lightweight init variant without the
@@ -1157,7 +1163,7 @@ guards) — [`examples/deep_sleep_logger/`](../examples/deep_sleep_logger/).
 **Goal:** a single UI3 module monitors **three independent lines** on one phase with **different load levels**:
 - Channel 0 — a single outlet (SCT-013-005, ≤5 A) — TV / router / standby.
 - Channel 1 — the kitchen line (SCT-013-030, ≤30 A) — kettle / microwave.
-- Channel 2 — a heating boiler (SCT-013-100, ≤100 A) — peak load.
+- Channel 2 — a water-heater boiler (SCT-013-020, ≤20 A) — peak load.
 
 All three channels are fed from **a single phase** (in phase with the U channel), so P/PF/Q are correct for all three — see the single-voltage caveat in [03 · Current sensor selection](03_sensor_selection.md#modules-with-multiple-current-channels).
 
@@ -1173,11 +1179,11 @@ static const char *TAG = "ui3-mixed";
 void mixed_load_task(void *arg) {
     rbamp_handle_t dev = (rbamp_handle_t)arg;
 
-    /* Per-channel configuration — DESCENDING ORDER is mandatory */
+    /* Per-channel configuration — v1.3: order is arbitrary (pure staging) */
     rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013);
-    rbamp_set_ct_model_ch(dev, 2, 5);   /* ch2: SCT-013-100 (boiler) */
+    rbamp_set_ct_model_ch(dev, 2, 6);   /* ch2: SCT-013-020 (boiler) */
     rbamp_set_ct_model_ch(dev, 1, 3);   /* ch1: SCT-013-030 (kitchen) */
-    rbamp_set_ct_model_ch(dev, 0, 1);   /* ch0: SCT-013-005 (outlet) — last */
+    rbamp_set_ct_model_ch(dev, 0, 1);   /* ch0: SCT-013-005 (outlet) */
 
     while (1) {
         float u, i0, i1, i2, p0, p1, p2;
@@ -1200,7 +1206,7 @@ void mixed_load_task(void *arg) {
 }
 ```
 
-**When to use:** monitoring a single phase with three load groups of different current magnitude. The main advantage is **resolution** — each clamp matches its range (an SCT-013-005 gives accurate readings on a 50 W standby load, while an SCT-013-100 does not saturate on a 20 kW boiler).
+**When to use:** monitoring a single phase with three load groups of different current magnitude. The main advantage is **resolution** — each clamp matches its range (an SCT-013-005 gives accurate readings on a 50 W standby load, while an SCT-013-020 does not saturate on a ~4 kW water-heater boiler).
 
 ---
 

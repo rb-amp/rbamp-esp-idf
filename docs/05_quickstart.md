@@ -214,7 +214,7 @@ Model codes:
 | 2 | SCT-013-010 | 0..10 A | Refrigerator, washing machine |
 | 3 | SCT-013-030 | 0..30 A | Household feed up to ~7 kW |
 | 4 | SCT-013-050 | 0..50 A | EV charger, electric heating |
-| 5 | SCT-013-100 | 0..100 A | Whole-house main feed |
+| 6 | SCT-013-020 | 0..20 A | Water heater, boiler, large appliance |
 
 More on selection — [03 · Current sensor selection](03_sensor_selection.md).
 

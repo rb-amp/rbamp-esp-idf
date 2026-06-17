@@ -17,8 +17,8 @@ Cloud) — [08 · Cloud integrations](08_cloud_integrations.md).
 | InfluxDB OSS + Grafana | HTTPS line-protocol | no | `esp_http_client` |
 
 > Ready-made projects for the two main scenarios live in `examples/`:
-> [`examples/mqtt_publisher/`](../examples/mqtt_publisher/) (per-channel
-> MQTT publisher) and [`examples/ha_discovery/`](../examples/ha_discovery/)
+> [`examples/mqtt_publisher/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/mqtt_publisher/) (per-channel
+> MQTT publisher) and [`examples/ha_discovery/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/ha_discovery/)
 > (HA Auto-discovery on top of mqtt_publisher).
 
 ---
@@ -167,7 +167,7 @@ void app_main(void) {
 }
 ```
 
-Full project — [`examples/ha_discovery/`](../examples/ha_discovery/).
+Full project — [`examples/ha_discovery/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/ha_discovery/).
 
 ### Result in HA
 

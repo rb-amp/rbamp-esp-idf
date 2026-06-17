@@ -92,13 +92,13 @@ void setup_sensor(rbamp_handle_t dev) {
 
     /* Step 2: select the model within the family.
      * 1 = SCT-013-005, 2 = SCT-013-010, 3 = SCT-013-030,
-     * 4 = SCT-013-050, 5 = SCT-013-100. */
+     * 4 = SCT-013-050, 6 = SCT-013-020. */
     err = rbamp_set_ct_model(dev, 3);   /* e.g. SCT-013-030 */
     if (err != ESP_OK) {
         /* Possible causes:
          *   ESP_ERR_INVALID_STATE — rbamp_set_sensor_class() was not called
          *                            before rbamp_set_ct_model()
-         *   ESP_ERR_INVALID_ARG   — code out of the 1..5 range
+         *   ESP_ERR_INVALID_ARG   — code not in {1,2,3,4,6}
          *   ESP_FAIL              — communication error (NACK after retry)
          */
         ESP_LOGE("app", "set_ct_model: %s", rbamp_err_to_str(err));
@@ -199,8 +199,8 @@ If something doesn't add up, see [10_troubleshooting.md](10_troubleshooting.md).
 On multi-channel modules (`I2`, `I3`) each current channel has an
 **independent** choice of SCT-013 model. You can connect, for example,
 an SCT-013-005 to channel 0 (a single outlet), an SCT-013-030 to channel 1
-(the electric stove line), and an SCT-013-100 to channel 2 (the main
-service entry).
+(the electric stove line), and an SCT-013-020 to channel 2 (a water
+heater or boiler).
 
 The API for per-channel selection is `rbamp_set_ct_model_ch(dev, channel, code)`:
 
@@ -210,7 +210,7 @@ rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013);   /* once for all */
 /* v1.3: channel binding order is arbitrary. */
 rbamp_set_ct_model_ch(dev, 0, 1);   /* channel 0: SCT-013-005 */
 rbamp_set_ct_model_ch(dev, 1, 3);   /* channel 1: SCT-013-030 */
-rbamp_set_ct_model_ch(dev, 2, 5);   /* channel 2: SCT-013-100 */
+rbamp_set_ct_model_ch(dev, 2, 6);   /* channel 2: SCT-013-020 */
 ```
 
 > ✅ **Binding order is arbitrary (v1.3 canon).** Writing `REG_CT_MODEL (0x05)` stages the value but does **not** apply it to any channel automatically. Application happens **only** via `CMD_SET_CT_MODEL_CHn` per channel, which takes the currently staged value and writes it to its own channel. Channels can be configured in any order (ch0 first, last, interleaved — it makes no difference); no clobbering occurs. Any mentions of "ascending / descending / bind ch0 last" in older documents and codebases refer to pre-v1.3 behavior — they can be removed.
@@ -302,7 +302,8 @@ float read_combined_current(rbamp_handle_t dev) {
      * approaches the overload point.
      *
      * The 4.5 A threshold for the SCT-013-005 is PROVISIONAL; the exact
-     * value will be determined by bench validation (see below on IP-010).
+     * value will be determined by the factory bench-calibration program
+     * (see the bench-validation note below).
      * Behavior near the threshold is a matter for measurement, not
      * estimation. */
     if (err_low == ESP_OK && i_low < 4.5f) {
@@ -318,12 +319,10 @@ float read_combined_current(rbamp_handle_t dev) {
 > orientation of both clamps and the allowable distances between them —
 > will appear here as it is prepared.
 
-<!-- MD028 separator -->
-
 > ⚙ **Bench validation.** The exact figures for the dual-CT template
 > (behavior near the threshold, temperature drift, divergence of the two
-> clamps in the overlapping range) are established by the IP-010
-> measurement program (following IP-001). Until it is complete, treat
+> clamps in the overlapping range) are established by the factory
+> bench-calibration program (bench validation). Until it is complete, treat
 > dual-CT as a pilot pattern; for critical applications a single clamp
 > sized to the upper load range is preferable.
 
@@ -419,9 +418,11 @@ Three strategies in order of increasing complexity:
 2. **Dual-CT topology** (requires an I2/I3 SKU — two current channels on one module): a small clamp for the
    lower range + a large one for the upper, with the master selecting by
    threshold. See the section "Dual-CT topology" above — the pattern is a
-   pilot, the numbers are being refined by the IP-010 program.
-3. **Bench calibration of the noise floor** (factory-side): IP-001
-   characterizes the noise floor on the test bench; the results are baked
+   pilot, the numbers are being refined by the factory bench-calibration
+   program.
+3. **Bench calibration of the noise floor** (factory-side): the factory
+   bench-calibration program characterizes the noise floor on the test
+   bench; the results are baked
    into the firmware's calibration array. On the user side, nothing needs
    to be done beyond `setSensorClass()` + `setCTModel()`. Until the
    program is complete, concrete accuracy figures at low currents are not

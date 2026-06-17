@@ -464,7 +464,8 @@ unresponsive or the master is polling too often.
    ```
 
 4. **Check the firmware version** — `rbamp_firmware_version(dev) >= 0x02`
-   shows fewer stales than 0x01.
+   shows fewer stales than 0x01. Current canonical firmware is
+   `0x04` (v1.3); `0x01`=v1.0, `0x02`=v1.1, `0x03`=v1.2.
 
 ### Special case — deep-sleep wake
 
@@ -805,7 +806,7 @@ before returning:
 | Log line (ESP_LOGW, TAG="rbamp") | Cause | Solution |
 |---|---|---|
 | `set_ct_model_ch refused: sensor class is UNSET (call rbamp_set_sensor_class first)` | Precondition: the sensor class must be set before writing the CT model | Call `rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013)` before `rbamp_set_ct_model*()`. |
-| `set_ct_model_ch refused: channel %u after %u (descending order required; call rbamp_set_sensor_class first to reset batch)` | Per-channel calls were made in **ascending** order (e.g., `ch0` → `ch1` → `ch2`) — violating the legacy side-effect on channel 0 | Reorder them descending: `ch2` → `ch1` → `ch0`. Alternatively, call `rbamp_set_sensor_class()` again, which resets the batch tracker and lets you start from any channel. |
+| `set_ct_model_ch refused: bind sequence error (call rbamp_set_sensor_class first to reset batch)` | The component's internal batch tracker is out of sync with the firmware's staging state | On v1.3 firmware the channel binding order is **arbitrary** (Fix-A pure staging — see [03 · Current sensor selection](03_sensor_selection.md)). Call `rbamp_set_sensor_class()` again to reset the batch tracker, then bind channels in any order. The "descending order required" wording from older log messages refers to pre-v1.3 behavior and is no longer in force. |
 
 There's also the case of a **handle that's initialized but
 `rbamp_begin()` hasn't been called** — this returns
@@ -822,7 +823,7 @@ any `rbamp_set_*`.
 > the call: the component will tell you which of the three cases you
 > have. `rbamp_err_to_str(ESP_ERR_INVALID_STATE)` returns a generic
 > description: *"Wrong call sequence (check log: develop mode /
-> sensor class UNSET / CT model ascending order)"*.
+> sensor class UNSET / bind batch out of sync)"*.
 
 ## `rbamp_set_sensor_class` / `rbamp_set_ct_model*` returns `ESP_ERR_INVALID_ARG`
 
@@ -830,9 +831,11 @@ any `rbamp_set_*`.
 
 Possible causes:
 
-1. **Invalid model code** — the valid range is 1..5 (see the table
-   in [03 · Current sensor selection](03_sensor_selection.md)).
-   Values 0 and 6+ return `ESP_ERR_INVALID_ARG`.
+1. **Invalid model code** — the valid model codes are `{1, 2, 3, 4, 6}`
+   (see the table in [03 · Current sensor selection](03_sensor_selection.md)).
+   Code `6` (SCT-013-020) is valid; code `5` (SCT-013-100) is
+   **reserved/removed**. Values `0`, `5`, and `7+` return
+   `ESP_ERR_INVALID_ARG`.
 2. **Invalid channel index** in the per-channel form
    `rbamp_set_ct_model_ch(dev, channel, code)` — must be <
    `rbamp_channels(dev)`.
@@ -930,7 +933,7 @@ The `rbamp_*` functions return standard `esp_err_t` values.
 |---|---|---|
 | `ESP_OK` (0) | success | — |
 | `ESP_FAIL` (-1) | NACK after retry; or the sanity filter rejected the value | "Module doesn't respond over I²C" section |
-| `ESP_ERR_INVALID_ARG` (0x102) | `dev == NULL`, `channel`/`phase` out of range, `code` outside 1..5, reserved `cls` | check the call arguments |
+| `ESP_ERR_INVALID_ARG` (0x102) | `dev == NULL`, `channel`/`phase` out of range, `code` not in {1,2,3,4,6}, reserved `cls` | check the call arguments |
 | `ESP_ERR_TIMEOUT` (0x107) | `rbamp_wait_ready` expired (module not responding) OR the 5 s window between `prepare_address_change` and `commit_address_change` expired | for wait_ready — via `rbamp_probe()`; for commit — re-arm: `prepare` + `commit` back-to-back with no blocking I/O between them |
 | `ESP_ERR_INVALID_STATE` (0x103) | precondition: `set_ct_model*` before `set_sensor_class` | the `set_*` section above |
 | `ESP_ERR_NOT_SUPPORTED` (0x106) | the function is unavailable on the current SKU (e.g., the voltage API on an I* variant) | check `rbamp_hw_variant(dev)` |

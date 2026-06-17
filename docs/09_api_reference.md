@@ -1,7 +1,7 @@
 # 09 · API Reference
 
 The complete public API of the `rbamp` component for ESP-IDF.
-The source is the header file [`include/rbamp.h`](../include/rbamp.h)
+The source is the header file [`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/components/rbamp/include/rbamp.h)
 with Doxygen comments.
 
 This chapter is a reference: signatures, return values, side
@@ -1139,9 +1139,13 @@ is equivalent to `rbamp_set_ct_model_ch(dev, 0, code)`. Blocking,
 | 2 | SCT-013-010 |
 | 3 | SCT-013-030 |
 | 4 | SCT-013-050 |
-| 5 | SCT-013-100 |
+| 6 | SCT-013-020 |
 
-`code` outside the range 1..5 → `ESP_ERR_INVALID_ARG`.
+Code `5` (SCT-013-100) is **reserved/removed** — it is not selectable
+on the current SKU. The valid model codes are `{1, 2, 3, 4, 6}`.
+
+`code` not in `{1, 2, 3, 4, 6}` (i.e. `0`, `5`, or `7+`) →
+`ESP_ERR_INVALID_ARG`.
 
 > **Precondition.** `rbamp_set_sensor_class()` must have been called
 > successfully before this function — otherwise it returns
@@ -1162,20 +1166,25 @@ Under the hood: write `REG_CT_MODEL` → command
 `CMD_SET_CT_MODEL_CH0/1/2` (0x28/0x29/0x2A) according to `channel` →
 5 ms settle → `CMD_SAVE_GAINS` → 700 ms. Blocking, ~705 ms.
 
-> **Important: call order matters.** Writing `REG_CT_MODEL`
-> also triggers a reg-write side effect that unconditionally applies
-> the preset to channel 0. That is, `rbamp_set_ct_model_ch(dev, 1, code)`
-> correctly configures channel 1, but **also clobbers channel 0**
-> with the same preset.
+> **Binding order is arbitrary (v1.3 canon).** CT-binding is
+> pure-staging: writing `REG_CT_MODEL` only **stages** the value — it
+> does **not** apply it to any channel automatically. Application
+> happens **only** via the per-channel `CMD_SET_CT_MODEL_CHn`, which
+> takes the currently staged value and writes it to its own channel.
+> Each channel is therefore bound independently, and **no clobbering**
+> of channel 0 (or any other channel) occurs.
 >
-> To correctly configure all channels with different models, call
-> them **in descending channel-index order**:
+> Channels can be configured in **any order** — ascending, descending,
+> or interleaved — it makes no difference:
 >
 > ```c
-> rbamp_set_ct_model_ch(dev, 2, 5);  /* channel 2 = SCT-013-100 */
-> rbamp_set_ct_model_ch(dev, 1, 3);  /* channel 1 = SCT-013-030 */
 > rbamp_set_ct_model_ch(dev, 0, 1);  /* channel 0 = SCT-013-005 */
+> rbamp_set_ct_model_ch(dev, 1, 3);  /* channel 1 = SCT-013-030 */
+> rbamp_set_ct_model_ch(dev, 2, 6);  /* channel 2 = SCT-013-020 */
 > ```
+>
+> Any "ascending / descending / bind ch0 last" notes from pre-v1.3
+> documents and codebases no longer apply.
 
 `ESP_ERR_INVALID_STATE` guards the `rbamp_set_sensor_class()`
 precondition.
@@ -1283,13 +1292,19 @@ esp_err_t rbamp_broadcast_latch(i2c_master_bus_handle_t bus,
                                 uint32_t timeout_ms);
 ```
 
-Reserved for future firmware versions. On v1 firmware the function
-**always returns `ESP_ERR_NOT_SUPPORTED`** without touching the bus
-(General-Call is disabled in the v1 module's I²C peripheral).
+On v1.3 firmware (`REG_VERSION = 0x04`) this is the canonical fleet-sync
+path once General-Call has been enabled fleet-wide via
+`rbamp_fleet_enable_gc_all()`. The 5-byte General-Call frame
+`A5 27 <group> <tick_lo> <tick_hi>` latches every module in the matching
+group at the same wire moment, giving billing-grade synchronization
+between sub-meters. On legacy v1.0-v1.2 firmware (no `CAP_GC_LATCH`
+capability bit at `REG_CAPABILITY` 0x57) the function returns
+`ESP_ERR_NOT_SUPPORTED` without touching the bus; in that case use the
+sequential fallback below.
 
-To synchronize the period across several modules, use a sequential
-series of `rbamp_latch_period()` on each device, a common 50 ms
-settle, and a per-device
+**Sequential fallback** (legacy firmware or when GC has been left
+disabled): a series of `rbamp_latch_period()` on each device, a common
+50 ms settle, and a per-device
 `rbamp_read_period_snapshot(skip_latch=true)` — see
 [06 · Examples](06_examples.md), scenario "Monitoring multiple
 modules".
@@ -1375,7 +1390,7 @@ codes and their semantics in the rbamp context:
 |---|---|---|
 | `ESP_OK` (0) | Success | — |
 | `ESP_FAIL` (-1) | The I²C transaction failed after retries; or the sanity filter rejected a value | wiring, power, bus speed — section "The module does not respond over I²C" in [10 · Troubleshooting](10_troubleshooting.md) |
-| `ESP_ERR_INVALID_ARG` (0x102) | Invalid argument: `dev == NULL`, `channel` or `phase` out of range, `code` outside 1..5, a reserved `cls` | check the call arguments |
+| `ESP_ERR_INVALID_ARG` (0x102) | Invalid argument: `dev == NULL`, `channel` or `phase` out of range, `code` not in {1,2,3,4,6}, a reserved `cls` | check the call arguments |
 | `ESP_ERR_TIMEOUT` (0x107) | `rbamp_wait_ready` expired; the `rbamp_commit_address_change` window (5 s) expired | check responsiveness via `rbamp_probe()` |
 | `ESP_ERR_INVALID_STATE` (0x103) | Precondition not met: `set_ct_model*` before `set_sensor_class` | section "`rbamp_set_*` returns `ESP_ERR_INVALID_STATE`" in [10 · Troubleshooting](10_troubleshooting.md) |
 | `ESP_ERR_NOT_SUPPORTED` (0x106) | The function is unavailable on this SKU (for example, the voltage API on an I* variant) | check `rbamp_hw_variant(dev)` |
@@ -1444,7 +1459,7 @@ bypass the wrappers.
 | `RBAMP_SETTLE_MS_SET_CT_MODEL_CH2` | After `CMD_SET_CT_MODEL_CH2` | 5 |
 
 The source of truth is the `@defgroup rbamp_settle_ms` block in
-[`include/rbamp.h`](../include/rbamp.h). The numbers are the
+[`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/components/rbamp/include/rbamp.h). The numbers are the
 specification minimums of the rbAmp protocol; you cannot go shorter,
 you may go longer.
 
@@ -1593,5 +1608,5 @@ The frame only latches the period; it never carries destructive opcodes.
 - [10 · Troubleshooting](10_troubleshooting.md) — decoding errors and
   resolving common problems
 - The source header file with Doxygen comments:
-  [`include/rbamp.h`](../include/rbamp.h)
+  [`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/components/rbamp/include/rbamp.h)
 
