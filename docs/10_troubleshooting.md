@@ -847,8 +847,8 @@ Possible causes:
 
 ## `rbamp_commit_address_change` returns `ESP_ERR_TIMEOUT`
 
-If you have a module with develop mode enabled and `prepare` passed
-but `commit` returns `ESP_ERR_TIMEOUT`, the "arming" window has
+If `prepare` passed but `commit` returns `ESP_ERR_TIMEOUT`, the
+"arming" window has
 expired (5 seconds after `prepare`). `rbamp_probe()` **won't help**
 here (the module responds; the problem is in the state machine). The
 fix: call `rbamp_prepare_address_change()` again and immediately —
