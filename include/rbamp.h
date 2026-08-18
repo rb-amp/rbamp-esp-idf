@@ -693,7 +693,7 @@ esp_err_t rbamp_save_gains(rbamp_handle_t dev);
  * call ::rbamp_commit_address_change within 5 seconds.
  *
  * @note v1.3: this is **production-OK** (truth-doc §6.1) — the two-phase
- *       magic-armed @c CMD_COMMIT_ADDR is no longer develop-gated, so
+ *       magic-armed @c CMD_COMMIT_ADDR is no longer factory-gated, so
  *       field-swapping a production spare is supported. For provisioning a
  *       fresh module from the factory @c 0x50, prefer ::rbamp_provision (it
  *       wraps the solo-on-bus + conflict + verify + SAVE flow).
@@ -895,7 +895,7 @@ esp_err_t rbamp_clear_error(rbamp_handle_t dev);
  * @brief Issue @c CMD_SAVE_USER_CONFIG (0x32) — persist user config (700 ms).
  *
  * Persists @c sensor_class / @c ct_model (per channel) / @c fleet_config /
- * @c group_id / @c label. Production-OK (not develop-gated). On a freshly
+ * @c group_id / @c label. Production-OK (not factory-gated). On a freshly
  * flashed module this also clears the first-boot
  * @c RBAMP_V2_DEV_ERR_FLASH_PARAMS_BAD (0xFB) state (v1.3 B2).
  */

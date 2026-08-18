@@ -1038,7 +1038,7 @@ esp_err_t rbamp_prepare_address_change(rbamp_handle_t dev, uint8_t new_addr)
     }
     /* v1.3 A2 / truth-doc §6.1: the two-phase address commit (magic-armed
      * CMD_COMMIT_ADDR) is production-OK — field-swap of a production spare is
-     * supported, no develop-mode gate. (Was develop-gated under the v1.2
+     * supported, no factory-mode gate. (Was factory-gated under the v1.2
      * assumption; corrected for v1.3.) */
     dev->pending_addr = new_addr;
     dev->pending_armed_us = esp_timer_get_time();

@@ -27,9 +27,9 @@ extern "C" {
 #define RBAMP_V2_REG_COMMAND                   0x01u   /* Write CMD_* opcode (commands.yaml) */
 #define RBAMP_V2_REG_ERROR                     0x02u   /* 0x00=OK; 0xFA..0xFF error classes; ERR_CLONE added v1.3. Clear via CMD_CLEAR_ERROR (v1.3) */
 #define RBAMP_V2_REG_VERSION                   0x03u   /* 0x01=v1.0 .. 0x04=v1.3 */
-#define RBAMP_V2_REG_MODE                      0x04u   /* 0=production, 1=develop (PB5 strap at boot) */
+#define RBAMP_V2_REG_MODE                      0x04u   /* Device mode byte (read-only, factory use) */
 #define RBAMP_V2_REG_CT_MODEL                  0x05u   /* SCT-013 SKU 0=unset/1=-005/2=-010/3=-030/4=-050/5=-100/6=-020/7=-060 (v1.3). Direct write applies preset to ch */
-#define RBAMP_V2_REG_V03_PHASE_SAMPLES         0x06u   /* U-vs-I sample advance, 0..30. Develop-gated write (v1.3). Save via CMD_SAVE_GAINS. */
+#define RBAMP_V2_REG_V03_PHASE_SAMPLES         0x06u   /* U-vs-I sample advance, 0..30. Factory-gated write (v1.3). Save via CMD_SAVE_GAINS. */
 #define RBAMP_V2_REG_V03_PERIOD_VALID          0x07u   /* Set by CMD_LATCH_PERIOD: 1=fresh snapshot, 0=empty accumulator (race). NOT cleared-on-read. Failed latch does  */
 #define RBAMP_V2_REG_LUT_VALID_MASK            0x08u   /* bit n = slot n has valid LUT */
 #define RBAMP_V2_REG_LUT_QUERY_SLOT            0x09u   /* Select slot 0..3 → metadata latched into 0x0A-0x0F */
@@ -57,7 +57,7 @@ extern "C" {
 #define RBAMP_V2_REG_CALIBRATION               0x23u   /* Legacy calibration status byte */
 #define RBAMP_V2_REG_TOPOLOGY                  0x24u   /* 1=SINGLE, 2=SPLIT_PHASE, 3=THREE_PHASE (=V03_N_I) */
 #define RBAMP_V2_REG_SENSOR_CLASS              0x25u   /* 0=UNSET, 1=SCT_013, 2=WIRED_CT, 3=BUILTIN_CT. Class change resets CT_MODEL=0. */
-#define RBAMP_V2_REG_V03_PHASE_FRACT           0x26u   /* Sub-sample phase shift Q8. Develop-gated write (v1.3). Save via CMD_SAVE_GAINS. */
+#define RBAMP_V2_REG_V03_PHASE_FRACT           0x26u   /* Sub-sample phase shift Q8. Factory-gated write (v1.3). Save via CMD_SAVE_GAINS. */
 #define RBAMP_V2_REG_FLEET_CONFIG              0x27u   /* bit0=GC_ENABLE (General-Call latch reception; effective after reset - ENGC not toggled live). bits1-7 reserved */
 #define RBAMP_V2_REG_GROUP_ID                  0x28u   /* GC latch group filter. 0 = respond to all-call only. GC frame group byte must match or be 0x00 */
 #define RBAMP_V2_REG_DIGEST_CONFIG             0x29u   /* Digest window composition bitmask (see digest_mask_bits). Bits unsupported by variant → ERR_PARAM. 0 = digest  */
@@ -141,23 +141,23 @@ extern "C" {
 #define RBAMP_V2_REG_V03_PERIOD_AVG_P_SIZE     4
 #define RBAMP_V2_REG_V03_PERIOD_MAX_P          0xE0u   /* Latched max P ch0 this period */
 #define RBAMP_V2_REG_V03_PERIOD_MAX_P_SIZE     4
-#define RBAMP_V2_REG_V03_U_NOISE_FLOOR         0xE4u   /* Develop-gated write (v1.3) */
+#define RBAMP_V2_REG_V03_U_NOISE_FLOOR         0xE4u   /* Factory-gated write (v1.3) */
 #define RBAMP_V2_REG_V03_U_NOISE_FLOOR_SIZE    2
-#define RBAMP_V2_REG_V03_I0_NOISE_FLOOR        0xE6u   /* Develop-gated write (v1.3) */
+#define RBAMP_V2_REG_V03_I0_NOISE_FLOOR        0xE6u   /* Factory-gated write (v1.3) */
 #define RBAMP_V2_REG_V03_I0_NOISE_FLOOR_SIZE   2
-#define RBAMP_V2_REG_V03_I1_NOISE_FLOOR        0xE8u   /* Develop-gated write (v1.3) */
+#define RBAMP_V2_REG_V03_I1_NOISE_FLOOR        0xE8u   /* Factory-gated write (v1.3) */
 #define RBAMP_V2_REG_V03_I1_NOISE_FLOOR_SIZE   2
-#define RBAMP_V2_REG_V03_I2_NOISE_FLOOR        0xEAu   /* Develop-gated write (v1.3) */
+#define RBAMP_V2_REG_V03_I2_NOISE_FLOOR        0xEAu   /* Factory-gated write (v1.3) */
 #define RBAMP_V2_REG_V03_I2_NOISE_FLOOR_SIZE   2
 #define RBAMP_V2_REG_V03_PERIOD_LATCH_MS       0xECu   /* Chip-side dt between last two latches. Master fallback after its own restart */
 #define RBAMP_V2_REG_V03_PERIOD_LATCH_MS_SIZE  4
-#define RBAMP_V2_REG_V03_U_GAIN                0xF0u   /* Develop-gated write (v1.3). Save via CMD_SAVE_GAINS */
+#define RBAMP_V2_REG_V03_U_GAIN                0xF0u   /* Factory-gated write (v1.3). Save via CMD_SAVE_GAINS */
 #define RBAMP_V2_REG_V03_U_GAIN_SIZE           4
-#define RBAMP_V2_REG_V03_I0_GAIN               0xF4u   /* Develop-gated write (v1.3) */
+#define RBAMP_V2_REG_V03_I0_GAIN               0xF4u   /* Factory-gated write (v1.3) */
 #define RBAMP_V2_REG_V03_I0_GAIN_SIZE          4
-#define RBAMP_V2_REG_V03_I1_GAIN               0xF8u   /* Develop-gated write (v1.3) */
+#define RBAMP_V2_REG_V03_I1_GAIN               0xF8u   /* Factory-gated write (v1.3) */
 #define RBAMP_V2_REG_V03_I1_GAIN_SIZE          4
-#define RBAMP_V2_REG_V03_I2_GAIN               0xFCu   /* Develop-gated write (v1.3) */
+#define RBAMP_V2_REG_V03_I2_GAIN               0xFCu   /* Factory-gated write (v1.3) */
 #define RBAMP_V2_REG_V03_I2_GAIN_SIZE          4
 
 /* ---- Command opcodes ---- */
