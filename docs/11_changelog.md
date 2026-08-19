@@ -48,7 +48,7 @@ First public release of the `rbamp` component for ESP-IDF v5.x.
   `CMD_SET_CT_MODEL_CHn`. The binding order is arbitrary
   (the "ascending/descending order" anachronisms from pre-v1.3 have been removed).
 - **Address change is production-OK**: two-phase commit + magic + reset
-  works in production (no develop-mode required).
+  works in production (no factory-mode required).
 - **Master wall-clock = canonical timebase for Wh**: the chip software
   timer `PERIOD_LATCH_MS (0xEC)` is diagnostic-only and may underreport
   by up to 25-30% under load (SysTick starvation by design). The master

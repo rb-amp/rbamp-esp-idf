@@ -822,7 +822,7 @@ any `rbamp_set_*`.
 > `esp_log_level_set("rbamp", ESP_LOG_WARN)` (or `_DEBUG`) and repeat
 > the call: the component will tell you which of the three cases you
 > have. `rbamp_err_to_str(ESP_ERR_INVALID_STATE)` returns a generic
-> description: *"Wrong call sequence (check log: develop mode /
+> description: *"Wrong call sequence (check log: factory mode /
 > sensor class UNSET / bind batch out of sync)"*.
 
 ## `rbamp_set_sensor_class` / `rbamp_set_ct_model*` returns `ESP_ERR_INVALID_ARG`

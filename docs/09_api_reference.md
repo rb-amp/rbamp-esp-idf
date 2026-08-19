@@ -560,7 +560,7 @@ Returns:
 > **Read-back ≠ persistence**: confirming that a value was written
 > to flash requires a **reboot + re-read**. See the section
 > [Error model v1.3](#error-model-v13) below and
-> [03 · Current sensor selection](03_sensor_selection.md#production-vs-develop-mode-persistence-reference).
+> [03 · Current sensor selection](03_sensor_selection.md#production-vs-factory-mode-persistence-reference).
 
 ## Error model v1.3
 
@@ -1493,7 +1493,7 @@ for (int i = 0; i < 8; i++) {
 }
 ```
 
-This affects writable multi-byte registers: `LABEL` (0x68-0x6F), `U_GAIN` / `I_GAIN` (f32, develop-gated), `NF` (u16), `THRESH` (u16). Reads are burst-OK (auto-increment works on READ).
+This affects writable multi-byte registers: `LABEL` (0x68-0x6F), `U_GAIN` / `I_GAIN` (f32, factory-gated), `NF` (u16), `THRESH` (u16). Reads are burst-OK (auto-increment works on READ).
 
 ### Reading unmapped registers
 

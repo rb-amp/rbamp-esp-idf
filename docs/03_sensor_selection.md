@@ -428,7 +428,7 @@ Three strategies in order of increasing complexity:
    program is complete, concrete accuracy figures at low currents are not
    published.
 
-## Production vs Develop mode (persistence reference)
+## Production vs Factory mode (persistence reference)
 
 The rbAmp module operates in two modes that differ in **what exactly is
 saved to flash**. The current mode is read from the corresponding module
@@ -447,7 +447,7 @@ status register.
 In production mode, writes of the factory calibration (`CMD_SAVE_GAINS`,
 `CMD_FACTORY_RESET`) are **rejected by the firmware** — this protects
 against accidentally erasing the factory coefficients. Deploying
-develop-mode is a manufacturer-side operation; end users don't need it.
+factory-mode is a manufacturer-side operation; end users don't need it.
 
 > **Read-back ≠ persistence** (HW-verified A.7). The production guard
 > accepts a write into RAM (a subsequent read returns the written value),

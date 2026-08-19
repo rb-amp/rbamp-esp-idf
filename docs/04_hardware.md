@@ -192,7 +192,7 @@ two-phase sequence:
 5. wait ~300 ms; the new address is active
 ```
 
-The component wraps this in `rbamp_prepare_address_change()` / `rbamp_commit_address_change()` — see [09 · API Reference](09_api_reference.md). Persistence is confirmed **only after a reset** (see the “Production vs Develop mode” callout in [03_sensor_selection.md](03_sensor_selection.md#production-vs-develop-mode-persistence-reference)).
+The component wraps this in `rbamp_prepare_address_change()` / `rbamp_commit_address_change()` — see [09 · API Reference](09_api_reference.md). Persistence is confirmed **only after a reset** (see the “Production vs Factory mode” callout in [03_sensor_selection.md](03_sensor_selection.md#production-vs-factory-mode-persistence-reference)).
 
 #### Bus energy budget — how many modules your polling rate can sustain
 
