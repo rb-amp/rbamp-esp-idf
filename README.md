@@ -30,7 +30,7 @@ and multi-module fleets on one bus.
 From the ESP Component Registry:
 
 ```sh
-idf.py add-dependency "rbamp/rbamp^1.3"
+idf.py add-dependency "rbamp/rbamp^1.5"
 ```
 
 Or vendor the `rbamp` directory into your project's `components/`.
