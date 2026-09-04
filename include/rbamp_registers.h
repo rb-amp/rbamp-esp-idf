@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-#define RBAMP_REG_SCHEMA_CRC32    0x8D38A1C2U
+#define RBAMP_REG_SCHEMA_CRC32    0x21D3062CU
 #define RBAMP_PROTOCOL_VERSION    0x014CU   /* 1.3 */
 
 /* ---- Register addresses ---- */
@@ -37,9 +37,6 @@ extern "C" {
 #define RBAMP_REG_LUT_VIEW_INL_MAX_H         0x0Du
 #define RBAMP_REG_LUT_VIEW_DNL_MAX_L         0x0Eu
 #define RBAMP_REG_LUT_VIEW_DNL_MAX_H         0x0Fu
-#define RBAMP_REG_DIM0_LEVEL                 0x10u
-#define RBAMP_REG_DIM0_CURVE                 0x11u
-#define RBAMP_REG_DIM0_FADE_TIME             0x18u
 #define RBAMP_REG_AC_FREQ                    0x20u
 #define RBAMP_REG_AC_PERIOD_L                0x21u
 #define RBAMP_REG_AC_PERIOD_H                0x22u
@@ -67,42 +64,7 @@ extern "C" {
 #define RBAMP_REG_FAN_TARGET                 0x51u
 #define RBAMP_REG_FAN_MODE                   0x52u
 #define RBAMP_REG_FAN_STATUS                 0x53u
-#define RBAMP_REG_CS_CONFIG                  0x54u
 #define RBAMP_REG_HW_VARIANT                 0x55u
-#define RBAMP_REG_CS_INTERVAL_H              0x56u
-#define RBAMP_REG_CS0_SENSOR_TYPE            0x57u
-#define RBAMP_REG_ACC_SEL                    0x58u
-#define RBAMP_REG_COMMIT                     0x59u
-#define RBAMP_REG_CS0_MODE                   0x5Au
-#define RBAMP_REG_CS0_NOISE_FLOOR            0x5Bu
-#define RBAMP_REG_CS_PERIOD_BUFS_2           0x5Cu
-#define RBAMP_REG_CS_PERIOD_BUFS_3           0x5Du
-#define RBAMP_REG_CS_PERIOD_BUFS_L           0x5Eu
-#define RBAMP_REG_CS_PERIOD_BUFS_H           0x5Fu
-#define RBAMP_REG_CS0_STATUS                 0x60u
-#define RBAMP_REG_CS0_RMS_L                  0x61u
-#define RBAMP_REG_CS0_RMS_H                  0x62u
-#define RBAMP_REG_CS0_PEAK_L                 0x63u
-#define RBAMP_REG_CS0_PEAK_H                 0x64u
-#define RBAMP_REG_CS0_DIR                    0x65u
-#define RBAMP_REG_CS0_PERIOD_IDX             0x66u
-#define RBAMP_REG_CS0_DUR_0                  0x67u
-#define RBAMP_REG_CS0_DUR_1                  0x68u
-#define RBAMP_REG_CS0_DUR_2                  0x69u
-#define RBAMP_REG_CS0_DUR_3                  0x6Au
-#define RBAMP_REG_CS0_SMPL_0                 0x6Bu
-#define RBAMP_REG_CS0_SMPL_1                 0x6Cu
-#define RBAMP_REG_CS0_SMPL_2                 0x6Du
-#define RBAMP_REG_CS0_SMPL_3                 0x6Eu
-#define RBAMP_REG_CS0_MIN_L                  0x6Fu
-#define RBAMP_REG_CS0_MIN_H                  0x70u
-#define RBAMP_REG_CS0_MAX_L                  0x71u
-#define RBAMP_REG_CS0_MAX_H                  0x72u
-#define RBAMP_REG_CS0_DC_L                   0x73u
-#define RBAMP_REG_CS0_DC_H                   0x74u
-#define RBAMP_REG_CS0_CREST_L                0x75u
-#define RBAMP_REG_CS0_CREST_H                0x76u
-#define RBAMP_REG_CS0_RESERVED               0x77u
 #define RBAMP_REG_VS_STATUS                  0x78u
 #define RBAMP_REG_VS_RMS_L                   0x79u
 #define RBAMP_REG_VS_RMS_H                   0x7Au

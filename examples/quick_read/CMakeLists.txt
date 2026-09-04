@@ -8,6 +8,6 @@
 # EXTRA_COMPONENT_DIRS points back at libs/esp_idf/components/, where
 # CMake finds the rbamp/ component automatically.
 cmake_minimum_required(VERSION 3.16)
-set(EXTRA_COMPONENT_DIRS "../..")
+set(EXTRA_COMPONENT_DIRS "../../..")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(rbamp_quick_read)

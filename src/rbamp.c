@@ -284,6 +284,54 @@ static esp_err_t _read_float_le(rbamp_handle_t dev, uint8_t reg,
     return ESP_OK;
 }
 
+/** @internal Read one channel-window field as float32 LE (senior UI5/UI7).
+ *
+ * The window data buffer (0x3C-0x3F) is a snapshot taken when SELECT (0x32) is
+ * written, so we RE-SELECT before every read (device Rule #1). select+read is
+ * one atomic section — the selector is a single shared device resource; a
+ * handle must not be driven from two tasks without a caller-side mutex.
+ * @p field is a CHFIELD_* code, @p ch a 0-based channel. */
+static esp_err_t _read_window_field(rbamp_handle_t dev, uint8_t field,
+                                    uint8_t ch, float *out, float max_abs)
+{
+    esp_err_t err = _write_u8(dev, RBAMP_V2_REG_CHANNEL_SELECT,
+                              (uint8_t)((field << 4) | (ch & 0x0Fu)));
+    if (err != ESP_OK) return err;
+    return _read_float_le(dev, RBAMP_V2_REG_CHANNEL_DATA, out, max_abs);
+}
+
+/* Read one channel-window u8 field: re-select, then read the low data byte
+ * (0x3C). RE-SELECT BEFORE EVERY READ — the data buffer is a snapshot taken at
+ * select time, it does not track live values. */
+static esp_err_t _read_window_u8(rbamp_handle_t dev, uint8_t field,
+                                 uint8_t ch, uint8_t *out)
+{
+    esp_err_t err = _write_u8(dev, RBAMP_V2_REG_CHANNEL_SELECT,
+                              (uint8_t)((field << 4) | (ch & 0x0Fu)));
+    if (err != ESP_OK) return err;
+    return _read_u8(dev, RBAMP_V2_REG_CHANNEL_DATA, out);
+}
+
+/* Write one channel-window field: select (field<<4)|ch, then the four data
+ * bytes 0x3C-0x3F, ONE transaction each (firmware has no burst write). For the
+ * u8 fields (CT_MODEL) only 0x3C carries the value and 0x3D-0x3F are zero; the
+ * firmware applies the write on the terminal 0x3F transaction (SPEC
+ * CHANNEL_DATA). */
+static esp_err_t _write_window_field(rbamp_handle_t dev, uint8_t field,
+                                     uint8_t ch, uint8_t val)
+{
+    esp_err_t err = _write_u8(dev, RBAMP_V2_REG_CHANNEL_SELECT,
+                              (uint8_t)((field << 4) | (ch & 0x0Fu)));
+    if (err != ESP_OK) return err;
+    err = _write_u8(dev, (uint8_t)(RBAMP_V2_REG_CHANNEL_DATA + 0), val);
+    if (err != ESP_OK) return err;
+    err = _write_u8(dev, (uint8_t)(RBAMP_V2_REG_CHANNEL_DATA + 1), 0);
+    if (err != ESP_OK) return err;
+    err = _write_u8(dev, (uint8_t)(RBAMP_V2_REG_CHANNEL_DATA + 2), 0);
+    if (err != ESP_OK) return err;
+    return _write_u8(dev, (uint8_t)(RBAMP_V2_REG_CHANNEL_DATA + 3), 0);  /* applies */
+}
+
 /** @internal Sleep @c ms milliseconds via FreeRTOS. */
 static inline void _sleep_ms(uint32_t ms)
 {
@@ -308,8 +356,15 @@ esp_err_t rbamp_new_with_topology(i2c_master_bus_handle_t bus, uint8_t addr,
     if (!out || !bus || addr < 0x08 || addr > 0x77) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (topology < RBAMP_TOPOLOGY_SINGLE || topology > RBAMP_TOPOLOGY_THREE_PHASE) {
-        return ESP_ERR_INVALID_ARG;
+    switch (topology) {  /* channel COUNT — non-contiguous, no 4/6 (SPEC §8) */
+        case RBAMP_TOPOLOGY_SINGLE:
+        case RBAMP_TOPOLOGY_SPLIT_PHASE:
+        case RBAMP_TOPOLOGY_THREE_PHASE:
+        case RBAMP_TOPOLOGY_FIVE_CH:
+        case RBAMP_TOPOLOGY_SEVEN_CH:
+            break;
+        default:
+            return ESP_ERR_INVALID_ARG;
     }
     rbamp_handle_t dev = calloc(1, sizeof(*dev));
     if (!dev) {
@@ -347,20 +402,38 @@ void rbamp_del(rbamp_handle_t dev)
     free(dev);
 }
 
-/** @internal Map a HW_VARIANT wire byte to (channels, has_voltage). */
+/** @internal Map a HW_VARIANT wire byte to (channels, has_voltage).
+ *
+ * HW_VARIANT (0x55) is variant + U-bit; channel count also lives in
+ * REG_TOPOLOGY (0x24) and equals the map below. If the caller pinned a
+ * topology we keep it (and only WARN on mismatch) — variant and voltage
+ * presence are still adopted from the device (they are not "pinned"). */
 static void _apply_variant(rbamp_handle_t dev, uint8_t hw)
 {
+    uint8_t ch;
+    bool volt;
     switch (hw) {
-        case RBAMP_VARIANT_UI1: dev->channels = 1; dev->has_voltage_hw = true;  break;
-        case RBAMP_VARIANT_UI2: dev->channels = 2; dev->has_voltage_hw = true;  break;
-        case RBAMP_VARIANT_UI3: dev->channels = 3; dev->has_voltage_hw = true;  break;
-        case RBAMP_VARIANT_I1:  dev->channels = 1; dev->has_voltage_hw = false; break;
-        case RBAMP_VARIANT_I2:  dev->channels = 2; dev->has_voltage_hw = false; break;
-        case RBAMP_VARIANT_I3:  dev->channels = 3; dev->has_voltage_hw = false; break;
+        case RBAMP_VARIANT_UI1: ch = 1; volt = true;  break;
+        case RBAMP_VARIANT_UI2: ch = 2; volt = true;  break;
+        case RBAMP_VARIANT_UI3: ch = 3; volt = true;  break;
+        case RBAMP_VARIANT_I1:  ch = 1; volt = false; break;
+        case RBAMP_VARIANT_I2:  ch = 2; volt = false; break;
+        case RBAMP_VARIANT_I3:  ch = 3; volt = false; break;
+        case RBAMP_VARIANT_UI5: ch = 5; volt = true;  break;
+        case RBAMP_VARIANT_UI7: ch = 7; volt = true;  break;
         default: return;  /* leave caller's fallback values */
     }
     dev->variant = (rbamp_variant_t)hw;
-    dev->topology = (rbamp_topology_t)dev->channels;
+    dev->has_voltage_hw = volt;
+    if (dev->topology_user_pinned) {
+        if (dev->channels != ch) {
+            ESP_LOGW(TAG, "device reports %u channels (variant %u) but caller "
+                          "pinned %u — honoring caller pin", ch, hw, dev->channels);
+        }
+        return;
+    }
+    dev->channels = ch;
+    dev->topology = (rbamp_topology_t)ch;
 }
 
 /**
@@ -377,7 +450,7 @@ static void _detect_variant(rbamp_handle_t dev)
 {
     uint8_t hw = 0;
     if (_read_u8(dev, RBAMP_V2_REG_HW_VARIANT, &hw) == ESP_OK
-            && hw >= RBAMP_VARIANT_UI1 && hw <= RBAMP_VARIANT_I3) {
+            && hw >= RBAMP_VARIANT_UI1 && hw <= RBAMP_VARIANT_UI7) {
         _apply_variant(dev, hw);
     } else {
         /* Fallback: keep constructor topology, probe voltage via U_rms. */
@@ -514,36 +587,48 @@ esp_err_t rbamp_read_voltage_peak(rbamp_handle_t dev, uint8_t phase, float *out)
     return _read_float_le(dev, RBAMP_REG_V03_U_PEAK, out, RBAMP_SANITY_LIMIT_V);
 }
 
+/* Route one per-channel float quantity: ch0-2 = flat register (flat_base+ch*4),
+ * ch3+ = channel window (chfield). ONE internal guard so a future quantity
+ * cannot reintroduce a flat-address read for a senior channel — where the flat
+ * arithmetic would silently return the wrong register (see LESSONS L11 + the
+ * PUBLIC_API_TRUTH channel-access canon). */
+static esp_err_t _read_ch_float(rbamp_handle_t dev, uint8_t chfield, uint8_t ch,
+                                uint8_t flat_base, float *out, float max_abs)
+{
+    if (ch >= 3) return _read_window_field(dev, chfield, ch, out, max_abs);
+    return _read_float_le(dev, (uint8_t)(flat_base + ch * 4), out, max_abs);
+}
+
 esp_err_t rbamp_read_current(rbamp_handle_t dev, uint8_t ch, float *out)
 {
     if (!dev || !out) return ESP_ERR_INVALID_ARG;
     if (ch >= dev->channels) return ESP_ERR_INVALID_ARG;
-    return _read_float_le(dev, (uint8_t)(RBAMP_REG_V03_I0_RMS + ch * 4),
-                          out, RBAMP_SANITY_LIMIT_I);
+    return _read_ch_float(dev, RBAMP_V2_CHFIELD_I_RMS, ch,
+                          RBAMP_REG_V03_I0_RMS, out, RBAMP_SANITY_LIMIT_I);
 }
 
 esp_err_t rbamp_read_current_peak(rbamp_handle_t dev, uint8_t ch, float *out)
 {
     if (!dev || !out) return ESP_ERR_INVALID_ARG;
     if (ch >= dev->channels) return ESP_ERR_INVALID_ARG;
-    return _read_float_le(dev, (uint8_t)(RBAMP_REG_V03_I0_PEAK + ch * 4),
-                          out, RBAMP_SANITY_LIMIT_I);
+    return _read_ch_float(dev, RBAMP_V2_CHFIELD_I_PEAK, ch,
+                          RBAMP_REG_V03_I0_PEAK, out, RBAMP_SANITY_LIMIT_I);
 }
 
 esp_err_t rbamp_read_power(rbamp_handle_t dev, uint8_t ch, float *out)
 {
     if (!dev || !out) return ESP_ERR_INVALID_ARG;
     if (ch >= dev->channels) return ESP_ERR_INVALID_ARG;
-    return _read_float_le(dev, (uint8_t)(RBAMP_REG_V03_P0_REAL + ch * 4),
-                          out, RBAMP_SANITY_LIMIT_P);
+    return _read_ch_float(dev, RBAMP_V2_CHFIELD_P_REAL, ch,
+                          RBAMP_REG_V03_P0_REAL, out, RBAMP_SANITY_LIMIT_P);
 }
 
 esp_err_t rbamp_read_power_factor(rbamp_handle_t dev, uint8_t ch, float *out)
 {
     if (!dev || !out) return ESP_ERR_INVALID_ARG;
     if (ch >= dev->channels) return ESP_ERR_INVALID_ARG;
-    return _read_float_le(dev, (uint8_t)(RBAMP_REG_V03_PF0 + ch * 4),
-                          out, RBAMP_SANITY_LIMIT_PF);
+    return _read_ch_float(dev, RBAMP_V2_CHFIELD_PF, ch,
+                          RBAMP_REG_V03_PF0, out, RBAMP_SANITY_LIMIT_PF);
 }
 
 esp_err_t rbamp_read_frequency(rbamp_handle_t dev, float *out)
@@ -609,6 +694,50 @@ esp_err_t rbamp_read_all(rbamp_handle_t dev, rbamp_snapshot_t *out)
 }
 
 /* -------------------------------------------------------------------------
+ * Channel access window (senior UI5/UI7)
+ * ------------------------------------------------------------------------- */
+
+esp_err_t rbamp_read_channel(rbamp_handle_t dev, uint8_t ch,
+                             rbamp_channel_reading_t *out)
+{
+    if (!dev || !out) return ESP_ERR_INVALID_ARG;
+    if (ch >= dev->channels) return ESP_ERR_INVALID_ARG;
+    memset(out, 0, sizeof(*out));
+    /* Each accessor re-selects the window internally for ch>=3 (Rule #1). */
+    esp_err_t err;
+    err = _fold_field(rbamp_read_current(dev, ch, &out->i_rms),
+                      &out->i_rms, &out->implausible, RBAMP_FIELD_CURRENT);
+    if (err != ESP_OK) return err;
+    err = _fold_field(rbamp_read_current_peak(dev, ch, &out->i_peak),
+                      &out->i_peak, &out->implausible, RBAMP_FIELD_CURRENT);
+    if (err != ESP_OK) return err;
+    err = _fold_field(rbamp_read_power(dev, ch, &out->p_real),
+                      &out->p_real, &out->implausible, RBAMP_FIELD_POWER);
+    if (err != ESP_OK) return err;
+    return _fold_field(rbamp_read_power_factor(dev, ch, &out->pf),
+                       &out->pf, &out->implausible, RBAMP_FIELD_PF);
+}
+
+esp_err_t rbamp_read_all_channels(rbamp_handle_t dev,
+                                  rbamp_channel_reading_t *out, uint8_t n)
+{
+    if (!dev || !out) return ESP_ERR_INVALID_ARG;
+    const uint8_t count = (n < dev->channels) ? n : dev->channels;
+    for (uint8_t ch = 0; ch < count; ++ch) {
+        esp_err_t err = rbamp_read_channel(dev, ch, &out[ch]);
+        if (err != ESP_OK) return err;
+    }
+    return ESP_OK;
+}
+
+esp_err_t rbamp_read_commit_seq(rbamp_handle_t dev, uint8_t *out)
+{
+    if (!dev || !out) return ESP_ERR_INVALID_ARG;
+    /* DIGEST (0x70) layout: [STATUS_MIRROR u8][SEQ u8] — SEQ is offset 1. */
+    return _read_u8(dev, (uint8_t)(RBAMP_V2_REG_DIGEST + 1), out);
+}
+
+/* -------------------------------------------------------------------------
  * Period metering
  * ------------------------------------------------------------------------- */
 
@@ -632,6 +761,10 @@ esp_err_t rbamp_read_period_avg_power(rbamp_handle_t dev, uint8_t ch, float *out
 {
     if (!dev || !out) return ESP_ERR_INVALID_ARG;
     if (ch >= dev->channels) return ESP_ERR_INVALID_ARG;
+    /* ch3+ (senior UI5/UI7): the same latched avg P via window field 13. */
+    if (ch >= 3)
+        return _read_window_field(dev, RBAMP_V2_CHFIELD_PERIOD_AVG_P, ch, out,
+                                  RBAMP_SANITY_LIMIT_P);
     /* Non-contiguous register addresses per SPEC §7: ch0=0xDC, ch1=0xC2, ch2=0xC6. */
     uint8_t reg;
     switch (ch) {
@@ -699,11 +832,16 @@ esp_err_t rbamp_read_period_snapshot(rbamp_handle_t dev,
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    /* 5. Read avg_p per channel + max_p. latch_ms (0xEC) is read as a
-     *    DIAGNOSTIC value only (chip's view of dt); it is NOT used for energy. */
+    /* 5. Read avg_p for every channel (ch0-2 flat, ch3+ via window field 13 —
+     *    the device latches avg P atomically across ALL channels). The public
+     *    snapshot struct exposes only ch0-2; the full vector feeds the energy
+     *    accumulator so ch3+ Wh is available via rbamp_energy_wh. latch_ms
+     *    (0xEC) is DIAGNOSTIC only (chip's view of dt); NOT used for energy. */
+    float avg_all[RBAMP_MAX_CHANNELS] = {0};
     for (uint8_t ch = 0; ch < dev->channels; ++ch) {
-        err = rbamp_read_period_avg_power(dev, ch, &out->avg_p[ch]);
+        err = rbamp_read_period_avg_power(dev, ch, &avg_all[ch]);
         if (err != ESP_OK) return err;
+        if (ch < 3) out->avg_p[ch] = avg_all[ch];
     }
     err = rbamp_read_period_max_power(dev, &out->max_p);
     if (err != ESP_OK) return err;
@@ -714,7 +852,7 @@ esp_err_t rbamp_read_period_snapshot(rbamp_handle_t dev,
 
     /* 6. Integrate Wh using the MASTER dt, then advance the anchor. */
 #if !defined(CONFIG_RBAMP_DISABLE_ENERGY)
-    rbamp_energy_tick(&dev->energy, out->avg_p, dev->channels,
+    rbamp_energy_tick(&dev->energy, avg_all, dev->channels,
                       dt_ms, out->valid);
 #endif
     dev->last_latch_us = now_us;
@@ -818,27 +956,13 @@ static esp_err_t _check_sensor_class_set(rbamp_handle_t dev)
     return ESP_OK;
 }
 
-/** @internal Is @p code a characterised CT preset for sensor class @p cls?
- *
- * Per-class accepted set (SPEC registers_v2.yaml 0x05 / firmware
- * CT_PRESET_TABLE — NOT a contiguous range):
- *   SCT_013     {1,2,3,4,6}  (5=-100, 7=-060 reserved-uncharacterised)
- *   WIRED_CT    {1,2,3}
- *   BUILTIN_CT  {}           (per-unit factory cal — no presets)
- * Client-side fast-fail; the firmware also rejects an unaccepted code with
- * ERR_PARAM (caught by _check_write_error). */
-static bool _ct_model_valid(uint8_t cls, uint8_t code)
-{
-    switch (cls) {
-        case RBAMP_SENSOR_SCT013:
-            return code == 1 || code == 2 || code == 3 || code == 4 || code == 6;
-        case RBAMP_SENSOR_WIRED_CT:
-            return code == 1 || code == 2 || code == 3;
-        case RBAMP_SENSOR_BUILTIN_CT:
-        default:
-            return false;
-    }
-}
+/* NOTE: the client-side CT-preset whitelist (_ct_model_valid) was removed in
+ * v1.5.0. The set of accepted (class, model) codes is firmware runtime truth
+ * (ct_presets.c) — a code without a preset row returns ERR_PARAM (0xFE), which
+ * we surface via _check_write_error. A hand-maintained mirror here drifted six
+ * models behind the firmware in two days (2026-09-03); the device is the sole
+ * authority. Model semantics (names/descriptors) come from the generated
+ * rbamp_sensor_models.h, never from a local list. */
 
 esp_err_t rbamp_set_sensor_class(rbamp_handle_t dev, rbamp_sensor_class_t cls)
 {
@@ -846,18 +970,22 @@ esp_err_t rbamp_set_sensor_class(rbamp_handle_t dev, rbamp_sensor_class_t cls)
     if ((uint8_t)cls > (uint8_t)RBAMP_SENSOR_BUILTIN_CT) return ESP_ERR_INVALID_ARG;
     esp_err_t err = _write_u8(dev, RBAMP_REG_SENSOR_CLASS, (uint8_t)cls);
     if (err != ESP_OK) return err;
-    /* Synchronous verify before SAVE_GAINS — a rejected enum is caught here
+    /* Synchronous verify before the save — a rejected enum is caught here
      * (immediate), not via the ~200ms-lagged EVENT bit3, and we skip the
      * flash write entirely on rejection. */
     err = _check_write_error(dev);
     if (err != ESP_OK) return err;
-    return rbamp_save_gains(dev);
+    /* SENSOR_CLASS is user_config persistence: persist via CMD_SAVE_USER_CONFIG
+     * (ungated in production). CMD_SAVE_GAINS is develop-gated and would silently
+     * no-op for a production user (latent bug fixed in v1.5.0). */
+    return rbamp_save_user_config(dev);
 }
 
 esp_err_t rbamp_set_ct_model(rbamp_handle_t dev, uint8_t code)
 {
     if (!dev) return ESP_ERR_INVALID_ARG;
-    if (code < 1 || code > 7) return ESP_ERR_INVALID_ARG;  /* SKU namespace; per-class set checked below / device-side */
+    /* No client-side code range — the device validates (class, model) and raises
+     * ERR_PARAM for a code without a preset row (surfaced by _check_write_error). */
     esp_err_t err = _check_sensor_class_set(dev);
     if (err != ESP_OK) return err;
     /* v1.3 A1: REG_CT_MODEL (0x05) is PURE STAGING — a bare write no longer
@@ -868,10 +996,11 @@ esp_err_t rbamp_set_ct_model(rbamp_handle_t dev, uint8_t code)
     err = _write_cmd(dev, RBAMP_V2_CMD_SET_CT_MODEL_CH0);
     if (err != ESP_OK) return err;
     _sleep_ms(RBAMP_V2_SETTLE_MS_SET_CT_MODEL_CH0);
-    /* The CMD validates the (class, model) preset — verify before SAVE. */
+    /* The CMD validates the (class, model) preset — verify before persist. */
     err = _check_write_error(dev);
     if (err != ESP_OK) return err;
-    return rbamp_save_gains(dev);
+    /* CT_MODEL is user_config persistence — see rbamp_set_sensor_class. */
+    return rbamp_save_user_config(dev);
 }
 
 /**
@@ -883,9 +1012,11 @@ esp_err_t rbamp_set_ct_model(rbamp_handle_t dev, uint8_t code)
  * _check_write_error before returning, so a rejected (class, model) preset is
  * caught here without persisting anything.
  */
-static esp_err_t _bind_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t code)
+/* ch0-2 flat CMD bind: stage REG_CT_MODEL, issue CMD_SET_CT_MODEL_CHn (which
+ * device-validates the (class, model) pair and raises ERR_PARAM on a bad code),
+ * verify. No save. v1.2+ only (the per-channel opcodes don't exist earlier). */
+static esp_err_t _bind_ct_model_ch_flat(rbamp_handle_t dev, uint8_t channel, uint8_t code)
 {
-    /* v1.2+ requirement — CMD_SET_CT_MODEL_CH* does not exist on older fw. */
     uint8_t version = 0;
     esp_err_t err = _read_u8(dev, RBAMP_REG_VERSION, &version);
     if (err != ESP_OK) return err;
@@ -893,22 +1024,8 @@ static esp_err_t _bind_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t 
         ESP_LOGW(TAG, "set_ct_model_ch refused: firmware 0x%02X < v1.2", version);
         return ESP_ERR_NOT_SUPPORTED;
     }
-
-    /* Sensor-class precondition (same as the single-arg form). */
-    uint8_t cls = 0;
-    err = _read_u8(dev, RBAMP_REG_SENSOR_CLASS, &cls);
+    err = _check_sensor_class_set(dev);   /* class must be set (v1.2+) */
     if (err != ESP_OK) return err;
-    if (cls == (uint8_t)RBAMP_SENSOR_UNSET) {
-        ESP_LOGW(TAG, "set_ct_model_ch refused: sensor class is UNSET "
-                      "(call rbamp_set_sensor_class first)");
-        return ESP_ERR_INVALID_STATE;
-    }
-    /* Per-class accepted-set validation (fast-fail; firmware also rejects). */
-    if (!_ct_model_valid(cls, code)) {
-        ESP_LOGW(TAG, "set_ct_model_ch refused: code %u not a preset for class %u",
-                 code, cls);
-        return ESP_ERR_INVALID_ARG;
-    }
 
     /* v1.3 A1: REG_CT_MODEL (0x05) is pure staging — write the preset, then
      * issue the per-channel CMD which validates the (class, model) pair and
@@ -930,24 +1047,62 @@ static esp_err_t _bind_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t 
     err = _write_cmd(dev, kCmdPerCh[channel]);
     if (err != ESP_OK) return err;
     _sleep_ms(kSettlePerCh[channel]);
-    /* The CMD validates the (class, model) preset — verify before SAVE. */
+    /* The CMD validates the (class, model) preset — verify before persist. */
     return _check_write_error(dev);
 }
+
+/* ch3+ (senior SKU) bind via the channel window, field 15 = CT_MODEL (fw
+ * v1.4.18+). The window write applies the preset immediately (NF+GAIN+shape for
+ * that channel); the device raises ERR_PARAM (0xFE) on an unknown (class, model)
+ * and keeps the channel's previous model — surfaced, not masked. No save. */
+static esp_err_t _bind_ct_model_ch_window(rbamp_handle_t dev, uint8_t channel, uint8_t code)
+{
+    esp_err_t err = _check_sensor_class_set(dev);
+    if (err != ESP_OK) return err;
+    err = _write_window_field(dev, RBAMP_V2_CHFIELD_CT_MODEL, channel, code);
+    if (err != ESP_OK) return err;
+    return _check_write_error(dev);   /* surface ERR_PARAM, do not mask */
+}
+
+/* Route one channel's CT-model apply (no save): ch0-2 = flat CMD path, ch3+ =
+ * window field 15. ONE internal branch point per the PUBLIC_API_TRUTH
+ * channel-access canon — a single public setter, guard hidden inside. */
+static esp_err_t _apply_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t code)
+{
+    return (channel < 3) ? _bind_ct_model_ch_flat(dev, channel, code)
+                         : _bind_ct_model_ch_window(dev, channel, code);
+}
+
+/* Forward decl — the public setter readback-verifies via this (defined below). */
+static esp_err_t _verify_ct_bind(rbamp_handle_t dev, uint8_t ch, uint8_t expected);
 
 esp_err_t rbamp_set_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t code)
 {
     if (!dev) return ESP_ERR_INVALID_ARG;
-    if (channel > 2) return ESP_ERR_INVALID_ARG;
-    if (code < 1 || code > 7) return ESP_ERR_INVALID_ARG;  /* SKU namespace; per-class set checked below / device-side */
-    esp_err_t err = _bind_ct_model_ch(dev, channel, code);
+    /* Validate against the module's actual channel count (variant/topology),
+     * NOT a hardcoded 3 — ch3+ are real on senior UI5/UI7 SKUs. No client-side
+     * code range: the device validates (class, model). */
+    if (channel >= dev->channels) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = _apply_ct_model_ch(dev, channel, code);
     if (err != ESP_OK) return err;
-    return rbamp_save_gains(dev);
+    /* Readback-confirm the applied model before persisting (SPEC test rule: a
+     * write is not accepted until confirmed by readback). A STABLE WRONG mirror
+     * is a genuine miss; a torn read under bus load trusts the accepted CMD. */
+    esp_err_t v = _verify_ct_bind(dev, channel, code);
+    if (v == ESP_ERR_INVALID_STATE) return v;
+    /* CT_MODEL is user_config persistence — CMD_SAVE_USER_CONFIG (ungated),
+     * which persists ct_model_ch[] for all channels. */
+    return rbamp_save_user_config(dev);
 }
 
 esp_err_t rbamp_read_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t *out)
 {
     if (!dev || !out) return ESP_ERR_INVALID_ARG;
-    if (channel > 2) return ESP_ERR_INVALID_ARG;
+    if (channel >= dev->channels) return ESP_ERR_INVALID_ARG;
+    /* ch3+ (senior SKU): applied model is read back through the window, field 15.
+     * There is no flat mirror for seniors (0x51-0x53 cover ch0-2 only). */
+    if (channel >= 3)
+        return _read_window_u8(dev, RBAMP_V2_CHFIELD_CT_MODEL, channel, out);
     /* Applied-model mirrors are contiguous: CH0=0x51, CH1=0x52, CH2=0x53.
      * A/B double-read — a torn mirror would read as a false bind-fail. */
     return _read_u8_ab(dev, (uint8_t)(RBAMP_V2_REG_CT_MODEL_CH0 + channel), out);
@@ -991,8 +1146,9 @@ esp_err_t rbamp_configure_channels(rbamp_handle_t dev, rbamp_sensor_class_t cls,
     for (uint8_t ch = 0; ch < n; ++ch) {
         if (models[ch] == 0) continue;  /* skip unconfigured channel */
         /* Bind WITHOUT a per-channel SAVE — batched behind one terminal save
-         * below to spare flash endurance (was 1 + n flash cycles per call). */
-        err = _bind_ct_model_ch(dev, ch, models[ch]);
+         * below to spare flash endurance (was 1 + n flash cycles per call).
+         * Routes ch0-2 → flat CMD, ch3+ → window field 15. */
+        err = _apply_ct_model_ch(dev, ch, models[ch]);
         if (err != ESP_OK) return err;
         any_bound = true;
 
@@ -1003,7 +1159,7 @@ esp_err_t rbamp_configure_channels(rbamp_handle_t dev, rbamp_sensor_class_t cls,
          * bus load) is NOT a failure: trust the accepted+verified CMD. */
         esp_err_t v = _verify_ct_bind(dev, ch, models[ch]);
         if (v == ESP_ERR_INVALID_STATE) {
-            err = _bind_ct_model_ch(dev, ch, models[ch]);  /* re-bind once */
+            err = _apply_ct_model_ch(dev, ch, models[ch]);  /* re-bind once */
             if (err != ESP_OK) return err;
             v = _verify_ct_bind(dev, ch, models[ch]);
             if (v == ESP_ERR_INVALID_STATE) {
@@ -1017,8 +1173,10 @@ esp_err_t rbamp_configure_channels(rbamp_handle_t dev, rbamp_sensor_class_t cls,
                           "(transient read) — trusting accepted CMD", ch);
         }
     }
-    /* Single terminal flash persist for all channels bound this call. */
-    return any_bound ? rbamp_save_gains(dev) : ESP_OK;
+    /* Single terminal persist for all channels bound this call. CT_MODEL is
+     * user_config — CMD_SAVE_USER_CONFIG persists ct_model_ch[] for all channels
+     * (ungated; CMD_SAVE_GAINS is develop-gated and would no-op in production). */
+    return any_bound ? rbamp_save_user_config(dev) : ESP_OK;
 }
 
 esp_err_t rbamp_save_gains(rbamp_handle_t dev)

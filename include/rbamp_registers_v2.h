@@ -19,16 +19,16 @@
 extern "C" {
 #endif
 
-#define RBAMP_V2_REG_SCHEMA_CRC32_V2           0x5FB3E9F3U
+#define RBAMP_V2_REG_SCHEMA_CRC32_V2           0x45274BE8U
 #define RBAMP_V2_PROTOCOL_VERSION_V2           0x0103U   /* 1.3 — (major<<8)|minor */
 
 /* ---- Register addresses + sizes ---- */
 #define RBAMP_V2_REG_STATUS                    0x00u   /* bit0=READY, bit1=ERROR, bit2=EVENTS_PENDING (v1.3: mirror of EVENT_FLAGS!=0) */
 #define RBAMP_V2_REG_COMMAND                   0x01u   /* Write CMD_* opcode (commands.yaml) */
-#define RBAMP_V2_REG_ERROR                     0x02u   /* 0x00=OK; 0xFA..0xFF error classes; ERR_CLONE added v1.3. Clear via CMD_CLEAR_ERROR (v1.3) */
+#define RBAMP_V2_REG_ERROR                     0x02u   /* 0x00=OK; 0xFA..0xFF error classes; ERR_CLONE declared v1.3 but never raised (not implemented). Clear via CMD_C */
 #define RBAMP_V2_REG_VERSION                   0x03u   /* 0x01=v1.0 .. 0x04=v1.3 */
 #define RBAMP_V2_REG_MODE                      0x04u   /* Device mode byte (read-only, factory use) */
-#define RBAMP_V2_REG_CT_MODEL                  0x05u   /* SCT-013 SKU 0=unset/1=-005/2=-010/3=-030/4=-050/5=-100/6=-020/7=-060 (v1.3). Direct write applies preset to ch */
+#define RBAMP_V2_REG_CT_MODEL                  0x05u   /* CT model code; meaning is PER-CLASS (see SENSOR_CLASS 0x25). ACCEPTED (class,model) sets — codes without a CT_ */
 #define RBAMP_V2_REG_V03_PHASE_SAMPLES         0x06u   /* U-vs-I sample advance, 0..30. Factory-gated write (v1.3). Save via CMD_SAVE_GAINS. */
 #define RBAMP_V2_REG_V03_PERIOD_VALID          0x07u   /* Set by CMD_LATCH_PERIOD: 1=fresh snapshot, 0=empty accumulator (race). NOT cleared-on-read. Failed latch does  */
 #define RBAMP_V2_REG_LUT_VALID_MASK            0x08u   /* bit n = slot n has valid LUT */
@@ -48,14 +48,15 @@ extern "C" {
 #define RBAMP_V2_REG_ADC_MEAN_I2               0x16u   /* Raw ADC mean of I2 (UI3/I3) */
 #define RBAMP_V2_REG_ADC_MEAN_I2_SIZE          2
 #define RBAMP_V2_REG_CAPTURE_STATUS            0x18u   /* v1.3 raw-capture diag (major-carry glitch): bit0=ready. Arm via CMD_CAPTURE_RAW */
-#define RBAMP_V2_REG_CAPTURE_PAGE              0x19u   /* Page 0..7 — latches 32 raw I0 samples into CAPTURE_WINDOW */
-#define RBAMP_V2_REG_CAPTURE_WINDOW            0x1Au   /* 32×u16 LE raw pre-LUT I0 codes of selected page. Burst-read 64 bytes. 8 pages × 32 = 256 samples ~1.3 mains pe */
-#define RBAMP_V2_REG_CAPTURE_WINDOW_SIZE       64
+#define RBAMP_V2_REG_CAPTURE_PAGE              0x19u   /* Page 0..15 — latches 16 raw I0 samples into CAPTURE_WINDOW */
+#define RBAMP_V2_REG_CAPTURE_WINDOW            0x1Au   /* 16×u16 LE raw pre-LUT I0 codes of selected page. Burst-read 32 bytes (sized to the 32-byte-max I2C bridge read */
+#define RBAMP_V2_REG_CAPTURE_WINDOW_SIZE       32
+#define RBAMP_V2_REG_LUT_BYPASS                0x1Du   /* 1=bypass ADC-INL LUT (identity), 0=active. Diagnostic — LUT-on/off slope test */
 #define RBAMP_V2_REG_AC_FREQ                   0x20u   /* 50 or 60 */
 #define RBAMP_V2_REG_AC_PERIOD                 0x21u   /* Mains half-period */
 #define RBAMP_V2_REG_AC_PERIOD_SIZE            2
 #define RBAMP_V2_REG_CALIBRATION               0x23u   /* Legacy calibration status byte */
-#define RBAMP_V2_REG_TOPOLOGY                  0x24u   /* 1=SINGLE, 2=SPLIT_PHASE, 3=THREE_PHASE (=V03_N_I) */
+#define RBAMP_V2_REG_TOPOLOGY                  0x24u   /* Number of I channels (=V03_N_I): 1, 2, 3 junior; 5=UI5, 7=UI7 senior. Canonical semantics is the COUNT (2026-0 */
 #define RBAMP_V2_REG_SENSOR_CLASS              0x25u   /* 0=UNSET, 1=SCT_013, 2=WIRED_CT, 3=BUILTIN_CT. Class change resets CT_MODEL=0. */
 #define RBAMP_V2_REG_V03_PHASE_FRACT           0x26u   /* Sub-sample phase shift Q8. Factory-gated write (v1.3). Save via CMD_SAVE_GAINS. */
 #define RBAMP_V2_REG_FLEET_CONFIG              0x27u   /* bit0=GC_ENABLE (General-Call latch reception; effective after reset - ENGC not toggled live). bits1-7 reserved */
@@ -69,6 +70,11 @@ extern "C" {
 #define RBAMP_V2_REG_THRESH_P_HI_SIZE          2
 #define RBAMP_V2_REG_I2C_ADDRESS               0x30u   /* v1.3 two-phase: write candidate (0x08..0x77) -> RAM only (reads return staged value); arm ADDR_COMMIT_MAGIC th */
 #define RBAMP_V2_REG_ADDR_COMMIT_MAGIC         0x31u   /* Write 0xA5 to arm CMD_COMMIT_ADDR; consumed (cleared) on commit attempt. Write-only - reads return 0x00 */
+#define RBAMP_V2_REG_LOCK_ARM_MAGIC            0x33u   /* v1.4.3 factory-only: write 0x5A to arm CMD_PRODUCTION_LOCK; consumed on attempt. Write-only - reads return 0x0 */
+#define RBAMP_V2_REG_RDP_LEVEL                 0x34u   /* v1.4.3: readback-protection level sampled from the option bytes at boot. 0=open, 1=RDP L1 (locked), 2=L2. Fact */
+#define RBAMP_V2_REG_CHANNEL_SELECT            0x32u   /* (field << 4) | channel. Writing snapshots the selected value into CHANNEL_DATA - RE-SELECT BEFORE EVERY READ ( */
+#define RBAMP_V2_REG_CHANNEL_DATA              0x3Cu   /* Four independent 1-byte registers 0x3C-0x3F (single-byte masters work). Read: float32 LE (u16 LE zero-padded f */
+#define RBAMP_V2_REG_CHANNEL_DATA_SIZE         4
 #define RBAMP_V2_REG_UPTIME_S                  0x46u   /* Seconds since boot */
 #define RBAMP_V2_REG_UPTIME_S_SIZE             4
 #define RBAMP_V2_REG_RESET_CAUSE               0x4Au   /* Last reset reason flags from RCC_CSR: bit0=PIN, bit1=POR/BOR, bit2=SW, bit3=IWDG, bit4=WWDG, bit5=LPWR */
@@ -81,7 +87,7 @@ extern "C" {
 #define RBAMP_V2_REG_CT_MODEL_CH1              0x52u   /* Model applied to channel 1 */
 #define RBAMP_V2_REG_CT_MODEL_CH2              0x53u   /* Model applied to channel 2 */
 #define RBAMP_V2_REG_PRODUCT_ID                0x54u   /* Product family: 0x01=rbAmp sensor, 0x02=rbDimmer (own map!). Master MUST read before interpreting family-speci */
-#define RBAMP_V2_REG_HW_VARIANT                0x55u   /* BUILD_VARIANT: 1=UI1, 2=UI2, 3=UI3, 4=I1, 5=I2, 6=I3 */
+#define RBAMP_V2_REG_HW_VARIANT                0x55u   /* BUILD_VARIANT: 1=UI1, 2=UI2, 3=UI3, 4=I1, 5=I2, 6=I3, 7=UI5, 8=UI7. Senior parts report the BUILD_VARIANT code */
 #define RBAMP_V2_REG_FW_TIER                   0x56u   /* bits0-1: 0=BASIC,1=STANDARD,2=PRO; bit2=bidirectional; bit3=LUT-calibrated */
 #define RBAMP_V2_REG_CAPABILITY                0x57u   /* Feature bitmap (see capability_bits). Libraries branch on bits, never on VERSION heuristics */
 #define RBAMP_V2_REG_CAPABILITY_SIZE           2
@@ -185,6 +191,7 @@ extern "C" {
 #define RBAMP_V2_CMD_UID_MUTE_RESET            0x36u
 #define RBAMP_V2_CMD_ENTER_BOOTLOADER          0x37u
 #define RBAMP_V2_CMD_CAPTURE_RAW               0x38u
+#define RBAMP_V2_CMD_PRODUCTION_LOCK           0x39u
 #define RBAMP_V2_CMD_FACTORY_RESET             0xAAu
 
 /* ---- Command settle times (ms) ---- */
@@ -212,6 +219,7 @@ extern "C" {
 #define RBAMP_V2_SETTLE_MS_UID_MUTE_RESET      10u
 #define RBAMP_V2_SETTLE_MS_ENTER_BOOTLOADER    100u
 #define RBAMP_V2_SETTLE_MS_CAPTURE_RAW         80u
+#define RBAMP_V2_SETTLE_MS_PRODUCTION_LOCK     0u
 #define RBAMP_V2_SETTLE_MS_FACTORY_RESET       1500u
 
 /* ---- Device error codes ---- */
@@ -265,6 +273,14 @@ extern "C" {
 #define RBAMP_V2_EVENT_ERROR                   (1u << 3)
 #define RBAMP_V2_EVENT_CONFIG_CHANGED          (1u << 4)
 #define RBAMP_V2_EVENT_RESET_OCCURRED          (1u << 5)
+
+/* ---- CHANNEL_SELECT (0x32) window fields (high nibble; 4-12 reserved) ---- */
+#define RBAMP_V2_CHFIELD_I_RMS                 0u
+#define RBAMP_V2_CHFIELD_I_PEAK                1u
+#define RBAMP_V2_CHFIELD_P_REAL                2u
+#define RBAMP_V2_CHFIELD_PF                    3u
+#define RBAMP_V2_CHFIELD_PERIOD_AVG_P          13u
+#define RBAMP_V2_CHFIELD_CT_MODEL              15u
 
 /* ---- Extended address space (0xFF-prefix, 16-bit) — reserved layout ----
  *   0x0100-0x011F: Bidirectional: PERIOD_AVG_P_NEG[3] f32, E_NEG accumulators (decision 5.3: F4 tiers only)

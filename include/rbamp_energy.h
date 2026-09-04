@@ -19,10 +19,13 @@
 extern "C" {
 #endif
 
+/** @brief Largest channel count integrated (matches RBAMP_MAX_CHANNELS: UI7 = 7). */
+#define RBAMP_ENERGY_MAX_CH 7
+
 /** @brief Internal Wh accumulator (one per ::rbamp_handle_t). */
 typedef struct {
-    double  wh[3];   /**< Per-channel running Wh total (signed). */
-    bool    enabled; /**< Master switch — false means tick() is a no-op. */
+    double  wh[RBAMP_ENERGY_MAX_CH]; /**< Per-channel running Wh total (signed). */
+    bool    enabled;                 /**< Master switch — false means tick() is a no-op. */
 } rbamp_energy_t;
 
 /** @brief Initialise the accumulator (zero counters, enabled by default). */
@@ -38,7 +41,8 @@ void rbamp_energy_init(rbamp_energy_t *e);
  *
  * @param[in,out] e          Accumulator.
  * @param[in]     avg_p      Per-channel average power for the period (W).
- * @param[in]     channels   Number of valid channels in @c avg_p (1..3).
+ * @param[in]     channels   Number of valid channels in @c avg_p (1..7); clamped
+ *                           to ::RBAMP_ENERGY_MAX_CH.
  * @param[in]     period_ms  Elapsed duration of the billing window (ms). The
  *                           caller passes the MASTER wall-clock dt computed
  *                           from @c esp_timer_get_time() across consecutive
@@ -57,12 +61,12 @@ void rbamp_energy_init(rbamp_energy_t *e);
  * @param[in]     valid      REG_V03_PERIOD_VALID bit at read time.
  */
 void rbamp_energy_tick(rbamp_energy_t *e,
-                       const float avg_p[3],
+                       const float avg_p[],
                        uint8_t channels,
                        uint32_t period_ms,
                        bool valid);
 
-/** @brief Read running total for one channel (0..2). 0 if out of range. */
+/** @brief Read running total for one channel (0..::RBAMP_ENERGY_MAX_CH-1). 0 if out of range. */
 double rbamp_energy_wh_get(const rbamp_energy_t *e, uint8_t ch);
 
 /** @brief Zero one channel's running total. */

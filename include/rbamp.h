@@ -63,6 +63,9 @@
 
 #include "rbamp_registers.h"     /* auto-generated; do not edit */
 #include "rbamp_registers_v2.h"  /* auto-generated; v1.3 wire contract — do not edit */
+#include "rbamp_sensor_models.h" /* auto-generated from sensor_models.yaml — model
+                                  * names/descriptors + rbamp_sensor_model_lookup();
+                                  * do not edit */
 
 #ifdef __cplusplus
 extern "C" {
@@ -78,12 +81,24 @@ extern "C" {
  *
  * Reflects how many independent current channels the device exposes.
  * Voltage hardware presence is a separate flag — see ::rbamp_has_voltage_hw.
+ *
+ * The value is the channel COUNT — read from @c REG_TOPOLOGY (0x24) on v1.3+
+ * firmware, or the constructor hint on older firmware that returns 0 there.
+ * Channels 0-2 are read from the flat RT block; channels 3+ (senior UI5/UI7
+ * SKUs) are reachable ONLY through the channel access window — see
+ * ::rbamp_read_channel. The enum is intentionally non-contiguous (no 4/6):
+ * senior parts step 3 → 5 → 7.
  */
 typedef enum {
     RBAMP_TOPOLOGY_SINGLE      = 1, /**< 1 current channel (UI1 / I1). */
     RBAMP_TOPOLOGY_SPLIT_PHASE = 2, /**< 2 current channels (UI2 / I2). */
     RBAMP_TOPOLOGY_THREE_PHASE = 3, /**< 3 current channels (UI3 / I3). */
+    RBAMP_TOPOLOGY_FIVE_CH     = 5, /**< 5 current channels (UI5 senior SKU). */
+    RBAMP_TOPOLOGY_SEVEN_CH    = 7, /**< 7 current channels (UI7 senior SKU). */
 } rbamp_topology_t;
+
+/** @brief Largest channel count any SKU exposes — size channel arrays with this. */
+#define RBAMP_MAX_CHANNELS 7
 
 /**
  * @brief Sensor class — wire-byte values for @c REG_SENSOR_CLASS (0x25).
@@ -123,6 +138,8 @@ typedef enum {
     RBAMP_VARIANT_I1      = 4, /**< 1 current, no voltage / power. */
     RBAMP_VARIANT_I2      = 5, /**< 2 current, no voltage / power. */
     RBAMP_VARIANT_I3      = 6, /**< 3 current, no voltage / power. */
+    RBAMP_VARIANT_UI5     = 7, /**< 5 current + voltage + power (senior SKU). */
+    RBAMP_VARIANT_UI7     = 8, /**< 7 current + voltage + power (senior SKU). */
 } rbamp_variant_t;
 
 /**
@@ -137,7 +154,7 @@ typedef enum {
     RBAMP_CAP_DIGEST          = RBAMP_V2_CAP_DIGEST,          /**< Compact poll DIGEST window. */
     RBAMP_CAP_EVENTS          = RBAMP_V2_CAP_EVENTS,          /**< EVENT_FLAGS + DRDY alarm line. */
     RBAMP_CAP_UID_ARBITRATION = RBAMP_V2_CAP_UID_ARBITRATION, /**< UID-based address arbitration. */
-    RBAMP_CAP_SEAL            = RBAMP_V2_CAP_SEAL,            /**< Tamper seal. */
+    RBAMP_CAP_SEAL            = RBAMP_V2_CAP_SEAL,            /**< Tamper seal — reserved; not implemented in v1.4.x firmware (no seal command handler, no boot-time verification). */
     RBAMP_CAP_TWO_PHASE_ADDR  = RBAMP_V2_CAP_TWO_PHASE_ADDR,  /**< Two-phase address commit (magic-armed). */
     RBAMP_CAP_ZC_PHASE_OFFSET = RBAMP_V2_CAP_ZC_PHASE_OFFSET, /**< Zero-cross phase offset register. */
     RBAMP_CAP_SAVE_USER_CONFIG = RBAMP_V2_CAP_SAVE_USER_CONFIG, /**< CMD_SAVE_USER_CONFIG persistence. */
@@ -199,10 +216,29 @@ typedef struct {
     float power_factor[3];  /**< Power factor per channel (-1..+1). NaN if implausible. */
     float frequency;        /**< REG_AC_FREQ, Hz. NaN if implausible. */
     rbamp_topology_t topology; /**< Variant. */
-    uint8_t channels;       /**< 1..3. */
+    uint8_t channels;       /**< 1..3 (senior UI5/UI7 report 5/7; this struct's arrays hold ch0-2 — use rbamp_read_channel for ch3+). */
     bool has_voltage_hw;
     uint8_t implausible;    /**< Bitmask of @c RBAMP_FIELD_* classes set to NaN. 0 = all OK. */
 } rbamp_snapshot_t;
+
+/**
+ * @brief Single-channel real-time reading — output of ::rbamp_read_channel.
+ *
+ * Any channel (0..::rbamp_channels-1). For channels 0-2 the four fields come
+ * from the flat RT block; for channels 3+ (senior UI5/UI7) they come from the
+ * channel access window, re-selected per field. A field that trips its sanity
+ * bound is set to @c NaN and its @c RBAMP_FIELD_* bit raised in @c implausible,
+ * exactly like ::rbamp_snapshot_t. These are LIVE instantaneous values; a sweep
+ * across channels reads adjacent ~20 ms windows and is NOT a simultaneous
+ * snapshot (for aligned energy across channels use the period path).
+ */
+typedef struct {
+    float i_rms;         /**< RMS current, A. NaN if implausible. */
+    float i_peak;        /**< Peak current, A. NaN if implausible. */
+    float p_real;        /**< Real power, W (signed). NaN if implausible. */
+    float pf;            /**< Power factor (-1..+1). NaN if implausible. */
+    uint8_t implausible; /**< Bitmask of @c RBAMP_FIELD_* classes set to NaN. 0 = all OK. */
+} rbamp_channel_reading_t;
 
 /**
  * @brief Period-metering snapshot — output of ::rbamp_read_period_snapshot.
@@ -211,9 +247,14 @@ typedef struct {
  * between successive consumed reads (esp_timer). @c latch_ms is the chip's
  * view of that window and is DIAGNOSTIC ONLY: it under-counts ~25-30% under
  * SysTick starvation (E.6/F10), so it must NOT be used for billing.
+ *
+ * @note @c avg_p exposes channels 0-2 only. On senior UI5/UI7 SKUs the device
+ *       latches avg power for ALL channels atomically; channels 3+ are read via
+ *       ::rbamp_read_period_avg_power and their Wh via ::rbamp_energy_wh (the
+ *       accumulator integrates every channel). @c max_p stays a global (ch0).
  */
 typedef struct {
-    float avg_p[3];      /**< Average real power per channel over the latched period, W. */
+    float avg_p[3];      /**< Average real power over the latched period, ch0-2, W. */
     float max_p;         /**< Peak real power on channel 0 during the period, W. */
     uint32_t latch_ms;   /**< Chip-reported period duration, ms — DIAGNOSTIC only (under-counts). */
     uint32_t master_dt_ms; /**< Master wall-clock window since the previous consumed read, ms — the energy dt. */
@@ -376,7 +417,7 @@ uint8_t rbamp_firmware_version(rbamp_handle_t dev);
 /** @return Topology — caller-pinned via ::rbamp_new_with_topology, or default THREE_PHASE. */
 rbamp_topology_t rbamp_topology(rbamp_handle_t dev);
 
-/** @return Number of valid current channels (1..3). */
+/** @return Number of valid current channels (1..3 junior, 5/7 senior UI5/UI7). */
 uint8_t rbamp_channels(rbamp_handle_t dev);
 
 /** @return true if voltage sensing hardware was detected. */
@@ -395,16 +436,20 @@ esp_err_t rbamp_read_voltage(rbamp_handle_t dev, uint8_t phase, float *out);
 /** @brief Read peak voltage (REG_V03_U_PEAK, 0x8A) in V. */
 esp_err_t rbamp_read_voltage_peak(rbamp_handle_t dev, uint8_t phase, float *out);
 
-/** @brief Read RMS current for one channel (REG_V03_I*_RMS) in A. */
+/* Per-channel readers below accept @c ch 0..::rbamp_channels-1. Channels 0-2
+ * come from the flat RT block; channels 3+ (senior UI5/UI7) are fetched
+ * transparently through the channel access window (::rbamp_read_channel). */
+
+/** @brief Read RMS current for one channel (REG_V03_I*_RMS / window) in A. */
 esp_err_t rbamp_read_current(rbamp_handle_t dev, uint8_t ch, float *out);
 
-/** @brief Read peak current for one channel (REG_V03_I*_PEAK) in A. */
+/** @brief Read peak current for one channel (REG_V03_I*_PEAK / window) in A. */
 esp_err_t rbamp_read_current_peak(rbamp_handle_t dev, uint8_t ch, float *out);
 
-/** @brief Read real power for one channel (REG_V03_P*_REAL) in W (signed). */
+/** @brief Read real power for one channel (REG_V03_P*_REAL / window) in W (signed). */
 esp_err_t rbamp_read_power(rbamp_handle_t dev, uint8_t ch, float *out);
 
-/** @brief Read power factor for one channel (REG_V03_PF*) in -1..+1. */
+/** @brief Read power factor for one channel (REG_V03_PF* / window) in -1..+1. */
 esp_err_t rbamp_read_power_factor(rbamp_handle_t dev, uint8_t ch, float *out);
 
 /** @brief Read mains frequency (REG_AC_FREQ, 0x20) in Hz. */
@@ -428,6 +473,55 @@ esp_err_t rbamp_read_frequency(rbamp_handle_t dev, float *out);
 esp_err_t rbamp_read_all(rbamp_handle_t dev, rbamp_snapshot_t *out);
 
 /* -------------------------------------------------------------------------
+ * Channel access window (senior UI5/UI7 SKUs)
+ * -------------------------------------------------------------------------
+ * Channels 0-2 live in the flat RT block; channels 3+ are reachable ONLY
+ * through the window (register 0x32 select → 0x3C-0x3F data). The window data
+ * buffer is a snapshot taken at select time, so the driver RE-SELECTS before
+ * every field read (device Rule #1). select+read is one atomic section: the
+ * selector is a single shared device resource, so do not share one handle
+ * across tasks without your own mutex. All ::rbamp_read_current /
+ * _current_peak / _power / _power_factor accessors route ch3+ here
+ * automatically; the calls below fetch a whole channel or full fleet at once.
+ */
+
+/**
+ * @brief Read all four RT fields of one channel into a struct.
+ *
+ * @param[in]  dev Handle.
+ * @param[in]  ch  Channel 0..::rbamp_channels-1.
+ * @param[out] out Reading; per-field NaN + @c implausible bits on sanity reject.
+ * @return @c ESP_OK (check @c implausible), @c ESP_ERR_INVALID_ARG on a bad
+ *         channel, or the first underlying transport error.
+ */
+esp_err_t rbamp_read_channel(rbamp_handle_t dev, uint8_t ch,
+                             rbamp_channel_reading_t *out);
+
+/**
+ * @brief Read every populated channel into a caller array.
+ *
+ * @param[in]  dev Handle.
+ * @param[out] out Array of at least @p n entries (size with ::RBAMP_MAX_CHANNELS).
+ * @param[in]  n   Capacity of @p out; filled with @c min(n, ::rbamp_channels).
+ * @return @c ESP_OK, @c ESP_ERR_INVALID_ARG, or the first transport error.
+ */
+esp_err_t rbamp_read_all_channels(rbamp_handle_t dev,
+                                  rbamp_channel_reading_t *out, uint8_t n);
+
+/**
+ * @brief Read the digest sequence byte (DIGEST offset 1, 0x71).
+ *
+ * A @c uint8_t that increments on every ~20 ms device commit (wraps 255→0).
+ * Read it before and after a multi-register sweep: an unchanged value proves
+ * the reads came from one commit. The digest carries NO CRC.
+ *
+ * @param[in]  dev Handle.
+ * @param[out] out Sequence byte.
+ * @return @c ESP_OK or a transport error.
+ */
+esp_err_t rbamp_read_commit_seq(rbamp_handle_t dev, uint8_t *out);
+
+/* -------------------------------------------------------------------------
  * Period metering (SPEC §7)
  * ------------------------------------------------------------------------- */
 
@@ -437,7 +531,8 @@ esp_err_t rbamp_latch_period(rbamp_handle_t dev);
 /** @brief Read @c REG_V03_PERIOD_VALID (0x07) bit 0. */
 esp_err_t rbamp_is_period_valid(rbamp_handle_t dev, bool *out);
 
-/** @brief Read @c REG_V03_PERIOD_AVG_P for one channel (W; non-contiguous registers). */
+/** @brief Read latched average power for one channel (W). ch0-2 flat (non-contiguous
+ *         registers); ch3+ via the channel window (period field). */
 esp_err_t rbamp_read_period_avg_power(rbamp_handle_t dev, uint8_t ch, float *out);
 
 /** @brief Read @c REG_V03_PERIOD_MAX_P_F0 (0xE0) — ch0 peak power this period (W). */
@@ -502,7 +597,7 @@ static inline esp_err_t rbamp_read_period_snapshot_simple(
  * otherwise emit unresolved-symbol errors).
  *
  * @param[in] dev Handle.
- * @param[in] ch  Channel index 0..2.
+ * @param[in] ch  Channel index 0..::rbamp_channels-1 (up to 6 on UI7).
  * @return Running total in Wh (signed; negative = net export), or 0
  *         if @c ch is out of range or energy is disabled.
  */
@@ -562,83 +657,92 @@ void rbamp_energy_enable(rbamp_handle_t dev);
 esp_err_t rbamp_set_sensor_class(rbamp_handle_t dev, rbamp_sensor_class_t cls);
 
 /**
- * @brief Set the SCT-013 CT model on channel 0 (legacy single-arg form).
+ * @brief Set the CT model on channel 0 (single-arg form).
  *
- * Writes @c REG_CT_MODEL (0x05), issues @c CMD_SAVE_GAINS, blocks 700 ms.
+ * Stages @c REG_CT_MODEL (0x05), applies via @c CMD_SET_CT_MODEL_CH0, then
+ * persists with @c CMD_SAVE_USER_CONFIG (~700 ms). The model set accepted for
+ * the active class is firmware runtime truth — there is no client-side list;
+ * an unknown (class, model) is rejected device-side (@c ERR_PARAM) and surfaced.
+ * For model codes/descriptors see the generated @c rbamp_sensor_models.h
+ * (::rbamp_sensor_model_lookup).
  *
  * v1.2+ firmware precondition: ::rbamp_set_sensor_class MUST be called first.
  * Otherwise this returns @c ESP_ERR_INVALID_STATE without writing. On v1.0 /
  * v1.1 firmware the precondition is skipped (backward compatibility — the
  * device-side callback has no guard).
  *
- * For multi-channel modules (UI2 / UI3 / I2 / I3) use ::rbamp_set_ct_model_ch
- * instead — this single-arg form configures only channel 0 via the device's
- * legacy direct-write path.
+ * For multi-channel modules use ::rbamp_set_ct_model_ch — this single-arg form
+ * targets channel 0.
  *
  * @param[in] dev  Handle.
- * @param[in] code CT preset for the active sensor class. SCT-013: 1=-005,
- *                 2=-010, 3=-030, 4=-050, 6=-020 (5=-100, 7=-060 reserved →
- *                 ERR_PARAM). WIRED_CT: 1..3. The accepted set is per-class,
- *                 not a contiguous range.
+ * @param[in] code CT preset code for the active sensor class (see
+ *                 @c rbamp_sensor_models.h).
  *
  * @return
  *   - @c ESP_OK on success
- *   - @c ESP_ERR_INVALID_ARG on null @c dev, @c code outside 1..7, or @c code
- *     not in the active class's accepted set
- *   - @c ESP_ERR_INVALID_STATE if v1.2+ firmware reports @c REG_SENSOR_CLASS == UNSET
+ *   - @c ESP_ERR_INVALID_ARG on null @c dev
+ *   - @c ESP_ERR_INVALID_STATE if v1.2+ firmware reports @c REG_SENSOR_CLASS ==
+ *     UNSET, or the device rejects the (class, model) pair
  *   - @c ESP_FAIL or @c ESP_ERR_TIMEOUT on I2C transport failure
  */
 esp_err_t rbamp_set_ct_model(rbamp_handle_t dev, uint8_t code);
 
 /**
- * @brief Set the SCT-013 CT model on a specific channel (v1.2+ firmware).
+ * @brief Set the CT model on a specific channel (v1.2+ firmware).
  *
- * Sequence: stages the preset by writing @c REG_CT_MODEL, issues
- * @c CMD_SET_CT_MODEL_CH0 / @c CMD_SET_CT_MODEL_CH1 / @c CMD_SET_CT_MODEL_CH2
- * (0x28 / 0x29 / 0x2A) per @p channel, waits 5 ms settle for the in-RAM
- * preset-table lookup, then issues @c CMD_SAVE_GAINS for flash persistence
- * (700 ms erase). Blocks ~705 ms per call.
+ * One public call for ANY channel; the routing is internal (PUBLIC_API_TRUTH
+ * channel-access canon):
+ *   - ch0-2: stages @c REG_CT_MODEL, applies via @c CMD_SET_CT_MODEL_CH0/1/2
+ *     (0x28/0x29/0x2A).
+ *   - ch3+ (senior UI5/UI7): applies via the channel window, field 15
+ *     (@c CHANNEL_SELECT = (15<<4)|ch, then @c CHANNEL_DATA), firmware v1.4.18+.
+ * Either way the applied model is read-back-confirmed, then persisted with
+ * @c CMD_SAVE_USER_CONFIG (ungated; persists @c ct_model_ch[] for all channels).
+ * The accepted model set is firmware runtime truth — no client list; an unknown
+ * (class, model) is rejected device-side (@c ERR_PARAM) and surfaced. Model
+ * codes/descriptors: generated @c rbamp_sensor_models.h.
  *
- * @note Order-independent (v1.3 A1 / Fix A). @c REG_CT_MODEL is PURE STAGING —
- *       writing it no longer applies the preset to channel 0; the per-channel
- *       command binds the staged preset to the requested channel ONLY. So
- *       mixed-CT configuration can be done in any channel order, and a bind to
- *       one channel never clobbers another:
+ * @note Order-independent (v1.3 A1 / Fix A). @c REG_CT_MODEL is PURE STAGING for
+ *       the ch0-2 path; each per-channel apply binds ONLY its own channel, so
+ *       mixed-CT configuration can be done in any order and never clobbers
+ *       another channel:
  * @code
- * rbamp_set_ct_model_ch(dev, 0, 1);  // ch0 = SCT-013-005
- * rbamp_set_ct_model_ch(dev, 1, 3);  // ch1 = SCT-013-030
- * rbamp_set_ct_model_ch(dev, 2, 6);  // ch2 = SCT-013-020
+ * rbamp_set_ct_model_ch(dev, 0, 3);  // ch0
+ * rbamp_set_ct_model_ch(dev, 1, 3);  // ch1
+ * rbamp_set_ct_model_ch(dev, 4, 8);  // ch4 (senior) — different model, fine
  * @endcode
- *       (The pre-Fix-A ch0 auto-apply that once forced "bind ch0 last" is gone.)
  *       For a one-call bulk variant see ::rbamp_configure_channels.
  *
- * Requires @c rbamp_firmware_version() >= 0x03 (v1.2). Returns
- * @c ESP_ERR_NOT_SUPPORTED on older firmware. The same v1.2+ sensor-class
+ * Requires @c rbamp_firmware_version() >= 0x03 (v1.2) for the ch0-2 path; ch3+
+ * needs the field-15 firmware (v1.4.18+). The same v1.2+ sensor-class
  * precondition as ::rbamp_set_ct_model applies.
  *
  * @param[in] dev     Handle.
- * @param[in] channel 0..2.
- * @param[in] code    1=SCT_013_005, 2=-010, 3=-030, 4=-050, 5=-100.
+ * @param[in] channel 0 .. ::rbamp_channels-1 (validated against the module's
+ *                    actual channel count, not a hardcoded 3).
+ * @param[in] code    CT preset code for the active class (see
+ *                    @c rbamp_sensor_models.h).
  *
  * @return
  *   - @c ESP_OK on success
- *   - @c ESP_ERR_INVALID_ARG on null @c dev, @c channel > 2, @c code outside
- *     1..7, or @c code not in the active class's accepted set
- *   - @c ESP_ERR_NOT_SUPPORTED on firmware older than v1.2
- *   - @c ESP_ERR_INVALID_STATE if @c REG_SENSOR_CLASS == @c UNSET on v1.2+
- *     (call ::rbamp_set_sensor_class first)
+ *   - @c ESP_ERR_INVALID_ARG on null @c dev or @c channel >= ::rbamp_channels
+ *   - @c ESP_ERR_NOT_SUPPORTED on firmware older than v1.2 (ch0-2 path)
+ *   - @c ESP_ERR_INVALID_STATE if @c REG_SENSOR_CLASS == @c UNSET on v1.2+,
+ *     the device rejects the (class, model) pair, or the applied model fails
+ *     read-back confirmation
  *   - @c ESP_FAIL or @c ESP_ERR_TIMEOUT on I2C transport failure
  */
 esp_err_t rbamp_set_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t code);
 
 /**
- * @brief Read the CT model ACTUALLY APPLIED to @p channel (0x51/0x52/0x53).
+ * @brief Read the CT model ACTUALLY APPLIED to @p channel.
  *
- * v1.3 bind-verify (B10): after ::rbamp_set_ct_model_ch, read this mirror to
- * confirm the preset took. @c 0 = unset. Distinct from @c REG_CT_MODEL (0x05)
- * which only holds the staged value.
+ * Bind-verify: after ::rbamp_set_ct_model_ch, read this to confirm the preset
+ * took. @c 0 = unset. ch0-2 read the flat mirrors (0x51/0x52/0x53); ch3+ read
+ * back through the channel window (field 15). Distinct from the staged
+ * @c REG_CT_MODEL (0x05).
  *
- * @param[in]  channel 0..2.
+ * @param[in]  channel 0 .. ::rbamp_channels-1.
  * @param[out] out     Receives the applied model code.
  */
 esp_err_t rbamp_read_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t *out);
@@ -652,14 +756,18 @@ esp_err_t rbamp_read_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t *o
  * entry in @p models skips that channel.
  *
  * @note Flash-friendly: the per-channel binds are batched behind a SINGLE
- *       terminal @c CMD_SAVE_GAINS (plus the one in @c set_sensor_class), so a
- *       3-channel configure costs 2 flash cycles, not 1+N. Each bind is still
+ *       terminal @c CMD_SAVE_USER_CONFIG (plus the one in @c set_sensor_class),
+ *       so an N-channel configure costs 2 persist cycles, not 1+N. Each bind is
  *       synchronously verified and read-back-confirmed before the save.
+ * @note Covers ALL channels of the module (variant-aware, clamped to
+ *       ::rbamp_channels): ch0-2 via the flat CMD path, ch3+ (senior UI5/UI7)
+ *       via the channel window (field 15). A mixed per-channel sensor set is a
+ *       first-class configuration.
  *
  * @param[in] dev    Handle.
  * @param[in] cls    Sensor class to apply first.
- * @param[in] models Array of CT model codes (per-class accepted set — see
- *                   ::rbamp_set_ct_model_ch), one per channel.
+ * @param[in] models Array of CT model codes (see @c rbamp_sensor_models.h),
+ *                   one per channel.
  * @param[in] n      Length of @p models.
  *
  * @return @c ESP_OK; @c ESP_ERR_INVALID_STATE if a channel could not be bound;
@@ -669,20 +777,20 @@ esp_err_t rbamp_configure_channels(rbamp_handle_t dev, rbamp_sensor_class_t cls,
                                    const uint8_t *models, uint8_t n);
 
 /**
- * @brief Bare @c CMD_SAVE_GAINS — flush gains/noise registers to flash (700 ms block).
+ * @brief Bare @c CMD_SAVE_GAINS — flush factory gain/noise registers to flash (700 ms block).
  *
- * Normally invoked internally by ::rbamp_set_sensor_class, ::rbamp_set_ct_model,
- * ::rbamp_set_ct_model_ch, and ::rbamp_commit_address_change — most users
- * never call this directly.
- *
- * @warning Normally invoked internally. Bare @c rbamp_save_gains is relevant
- *          ONLY if the caller has manually written to non-public calibration
- *          registers via raw register access — that is an out-of-warranty
- *          operation and bypasses the SKU-matched preset table. Incorrect
- *          values produce wrong current / power readings with no obvious
- *          warning. Each call performs a flash erase + write cycle (~700 ms);
- *          flash endurance is finite (~10 000 cycles per page) — do not call
- *          in a loop.
+ * @warning FACTORY path, DEVELOP-GATED: @c CMD_SAVE_GAINS is blocked in
+ *          production firmware and silently no-ops there. It is NOT the path for
+ *          user configuration — sensor class and CT models are @c user_config
+ *          persistence and are saved by ::rbamp_save_user_config (called
+ *          internally by ::rbamp_set_sensor_class / ::rbamp_set_ct_model /
+ *          ::rbamp_set_ct_model_ch / ::rbamp_configure_channels). This bare call
+ *          is relevant ONLY on a develop-gated unit that has manually written
+ *          non-public calibration registers via raw access — an out-of-warranty
+ *          operation that bypasses the SKU-matched preset table and can produce
+ *          wrong readings with no obvious warning. Each call is a flash erase +
+ *          write (~700 ms); endurance is finite (~10 000 cycles/page) — never in
+ *          a loop.
  */
 esp_err_t rbamp_save_gains(rbamp_handle_t dev);
 
