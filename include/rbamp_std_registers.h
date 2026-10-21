@@ -111,7 +111,7 @@
 #define RBAMP_STD_REG_LTA_SRC          0x0871U   /* u8  0 none · 1 NVM · 2 BKP · 3 legacy · 4 anchor (v0x5D+, rollback restore) */
 #define RBAMP_STD_REG_CAL_SRC          0x0872U   /* u8  0 built-in DEFAULT · 1 flash · 2 EEPROM · 3 stored cal not for this firmware */
 #define RBAMP_STD_REG_LTG_STATUS       0x0873U   /* u8  map 0x36: per-group (per-channel) energy store: 0 ok · 1 new · 2 FAULT (unreadable, persist inhibited) · 3 restarted at 0 (no valid copy: new/foreign NVM or after a firmware layout change) */
-#define RBAMP_STD_REG_LEGAL_NOEN       0x0884U   /* u16  ops executed without legal strap (report mode U3I3_LEGAL_GATE=0) */
+#define RBAMP_STD_REG_LEGAL_NOEN       0x0884U   /* u16  ops executed without legal gate */
 #define RBAMP_STD_REG_TIME_SET         0x08C0U   /* u32  write-only epoch + CMD SET_TIME 0x06 (Modbus: holding 0x8100 hi / 0x8101 lo) */
 #define RBAMP_STD_VOLTAGE_BASE         0x0200U   /* VOLTAGE block base */
 #define RBAMP_STD_VOLTAGE_STRIDE       0x0020U

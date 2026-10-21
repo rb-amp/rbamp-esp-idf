@@ -1,7 +1,7 @@
 # 09 · API Reference
 
 The complete public API of the `rbamp` component for ESP-IDF.
-The source is the header file [`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/components/rbamp/include/rbamp.h)
+The source is the header file [`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/include/rbamp.h)
 with Doxygen comments.
 
 This chapter is a reference: signatures, return values, side
@@ -1459,7 +1459,7 @@ bypass the wrappers.
 | `RBAMP_SETTLE_MS_SET_CT_MODEL_CH2` | After `CMD_SET_CT_MODEL_CH2` | 5 |
 
 The source of truth is the `@defgroup rbamp_settle_ms` block in
-[`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/components/rbamp/include/rbamp.h). The numbers are the
+[`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/include/rbamp.h). The numbers are the
 specification minimums of the rbAmp protocol; you cannot go shorter,
 you may go longer.
 
@@ -1608,5 +1608,5 @@ The frame only latches the period; it never carries destructive opcodes.
 - [10 · Troubleshooting](10_troubleshooting.md) — decoding errors and
   resolving common problems
 - The source header file with Doxygen comments:
-  [`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/components/rbamp/include/rbamp.h)
+  [`include/rbamp.h`](https://github.com/rb-amp/rbamp-esp-idf/blob/main/include/rbamp.h)
 

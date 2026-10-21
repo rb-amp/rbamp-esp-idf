@@ -43,7 +43,7 @@ won't.
 In the project root:
 
 ```sh
-idf.py add-dependency "rbamp/rbamp^1.5"
+idf.py add-dependency "rbamp/rbamp^1.7.2"
 ```
 
 The component downloads from the ESP Component Registry on the next build. The

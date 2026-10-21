@@ -899,7 +899,7 @@ reads by ~50-100 ms after commutation.
 `TASK_WDT`. It usually happens during EMI events (relay switching,
 inductive transients).
 
-**Cause (standfw [SKILL-NEW][BENCH-RESULT]):** under EMI-slowed reads
+**Cause:** under EMI-slowed reads
 (NACK-retry + bus_reset cycles) the ESP-IDF `i2c_master` driver can
 stretch a transaction to ~100 ms+. If a task runs a tight bulk-read
 loop without yields — task-WDT timeout.
@@ -921,8 +921,6 @@ for (int i = 0; i < N_METERS; i++) {
 
 Alternative: `esp_task_wdt_reset()` explicitly if the task is
 WDT-tracked.
-
-> Source: standfw `DimmerI2C-Test/I2C_MASTER_LESSONS.md` (bus-announced [SKILL-NEW]).
 
 ## Error-code summary table
 
