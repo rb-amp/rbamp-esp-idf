@@ -44,7 +44,7 @@ struct rbamp_fleet_obj_t {
  * persisted in flash at that point — re-running would then refuse "target
  * busy"). Retry across ~600 ms before declaring the module absent. Used ONLY
  * for the post-commit verify, not for the pre-commit "is anyone here" checks
- * (those want a fast single probe). standfw fleet-harden #1. */
+ * (those want a fast single probe). bench fleet-harden #1. */
 static bool _probe_retry(i2c_master_bus_handle_t bus, uint8_t addr)
 {
     for (int attempt = 0; attempt < 4; ++attempt) {
@@ -62,7 +62,7 @@ static bool _probe_retry(i2c_master_bus_handle_t bus, uint8_t addr)
  * clean, STABLE bitwise-AND (open-drain, 0 wins). So:
  *
  * SIGNAL 1 — static-identity cross-consistency (catches DIFFERENT-variant
- * idle, standfw exclude-bench). The wired-AND of two different-variant modules
+ * idle, bench exclude test). The wired-AND of two different-variant modules
  * produces an identity that is internally INCONSISTENT: e.g. I2 (HW=5) + UI1
  * (HW=1) AND to HW_VARIANT=1 ("UI1"), but a real UI1 advertises the voltage /
  * ZC-phase capability whereas the ANDed CAPABILITY bit = AND(UI1=1, I2=0) = 0.
@@ -71,9 +71,9 @@ static bool _probe_retry(i2c_master_bus_handle_t bus, uint8_t addr)
  * profile and the CAPABILITY register is a deterministic conflict signal.
  *   Voltage indicator = CAPABILITY bit 8 (@c RBAMP_V2_CAP_ZC_PHASE_OFFSET) —
  *   the STABLE invariant; the other capability bits vary by firmware build
- *   (current v1.3 source: base 0x069E / U-variant 0x079E; standfw bench
+ *   (current v1.3 source: base 0x069E / U-variant 0x079E; bench
  *   modules read older 0x0618 / 0x0718). bit8 alone keys the U/I distinction
- *   and is source-validated (root 2026-06-16). The I2+UI1 wired-AND yields
+ *   and is source-validated (2026-06-16). The I2+UI1 wired-AND yields
  *   HW_VARIANT 0x01 ("UI1") with bit8 CLEAR (AND of SET·CLEAR) → inconsistent.
  *   Do NOT key this on SENSOR_CLASS (0x25) — that is user-config, not
  *   variant-intrinsic.
@@ -356,7 +356,7 @@ esp_err_t rbamp_fleet_assign_address(rbamp_fleet_t fleet, rbamp_handle_t dev,
         return ESP_ERR_INVALID_RESPONSE;
     }
     /* The old address must have vacated — if it still answers, the move was
-     * partial or another module shared it (standfw fleet-harden #2). */
+     * partial or another module shared it (bench fleet-harden #2). */
     if (i2c_master_probe(fleet->bus, old_addr, CONFIG_RBAMP_I2C_TIMEOUT_MS) == ESP_OK) {
         ESP_LOGW(TAG, "assign: 0x%02X still answers after move — partial/conflict",
                  old_addr);
@@ -416,7 +416,7 @@ esp_err_t rbamp_provision(i2c_master_bus_handle_t bus, uint8_t desired_addr,
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    /* Positive single-module confirmation (standfw fleet-harden #2): 0x50 must
+    /* Positive single-module confirmation (bench fleet-harden #2): 0x50 must
      * now be EMPTY — the one module vacated it. If it still answers, the move
      * didn't take cleanly OR a second module was connected and stayed put. Fail
      * loud rather than leave a half-moved bus. (Two virgins that BOTH latched

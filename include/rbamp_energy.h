@@ -22,9 +22,15 @@ extern "C" {
 /** @brief Largest channel count integrated (matches RBAMP_MAX_CHANNELS: UI7 = 7). */
 #define RBAMP_ENERGY_MAX_CH 7
 
+/** Channel selector meaning "all channels" for ::rbamp_energy_wh_get / ::rbamp_energy_add_wh / ::rbamp_energy_reset_ch. */
+#ifndef RBAMP_ENERGY_CH_TOTAL
+#define RBAMP_ENERGY_CH_TOTAL 0xFFu
+#endif
+
 /** @brief Internal Wh accumulator (one per ::rbamp_handle_t). */
 typedef struct {
     double  wh[RBAMP_ENERGY_MAX_CH]; /**< Per-channel running Wh total (signed). */
+    double  wh_total;                /**< All-channel running Wh total (signed): sum of the per-channel feeds, or the module's own grand counter delta when the per-channel split is not published. */
     bool    enabled;                 /**< Master switch — false means tick() is a no-op. */
 } rbamp_energy_t;
 
@@ -49,15 +55,12 @@ void rbamp_energy_init(rbamp_energy_t *e);
  *                           consumed reads (see ::rbamp_read_period_snapshot,
  *                           field @c master_dt_ms) — NOT the chip's self-
  *                           reported period.
- *                           @note L9 / SPEC E.6 / F10: the device's own
- *                           REG_V03_PERIOD_LATCH_MS (0xEC) under-counts by
- *                           ~26% (HW-validated) due to timer-ISR starvation in
- *                           the module firmware, so it is DIAGNOSTIC-ONLY and
- *                           must never feed energy integration. A previous revision
- *                           wrongly used it (OI-3); fixed in 11b2a99. Future
- *                           porters: do NOT revert this to chip-period — the
- *                           accumulator is clock-agnostic and the master
- *                           wall-clock is the billing dt.
+ *                           @note The device's own REG_V03_PERIOD_LATCH_MS
+ *                           (0xEC) is diagnostic only (it may read short under
+ *                           load) and must not feed energy integration. The
+ *                           billing dt is the master wall-clock, or the
+ *                           module's commit-counted window (0xBE) for the
+ *                           first snapshot after rbamp_begin_resume.
  * @param[in]     valid      REG_V03_PERIOD_VALID bit at read time.
  */
 void rbamp_energy_tick(rbamp_energy_t *e,
@@ -68,6 +71,14 @@ void rbamp_energy_tick(rbamp_energy_t *e,
 
 /** @brief Read running total for one channel (0..::RBAMP_ENERGY_MAX_CH-1). 0 if out of range. */
 double rbamp_energy_wh_get(const rbamp_energy_t *e, uint8_t ch);
+
+/**
+ * @brief Add an already-measured energy amount (Wh, signed) to one channel or
+ *        to the all-channel total (::RBAMP_ENERGY_CH_TOTAL). Used when the
+ *        module publishes energy counters itself, so nothing is integrated
+ *        on the host. No-op while disabled.
+ */
+void rbamp_energy_add_wh(rbamp_energy_t *e, uint8_t ch, double wh);
 
 /** @brief Zero one channel's running total. */
 void rbamp_energy_reset_ch(rbamp_energy_t *e, uint8_t ch);

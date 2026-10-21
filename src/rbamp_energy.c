@@ -25,12 +25,27 @@ void rbamp_energy_tick(rbamp_energy_t *e,
     const uint8_t n = (channels > RBAMP_ENERGY_MAX_CH) ? RBAMP_ENERGY_MAX_CH : channels;
     for (uint8_t ch = 0; ch < n; ++ch) {
         /* E_Wh += avg_p_W * dt_s / 3600 — see SPEC §7. */
-        e->wh[ch] += (double)avg_p[ch] * dt_s / 3600.0;
+        const double wh = (double)avg_p[ch] * dt_s / 3600.0;
+        e->wh[ch]   += wh;
+        e->wh_total += wh;
+    }
+}
+
+void rbamp_energy_add_wh(rbamp_energy_t *e, uint8_t ch, double wh)
+{
+    if (!e->enabled) return;
+    if (ch == RBAMP_ENERGY_CH_TOTAL) {
+        e->wh_total += wh;
+    } else if (ch < RBAMP_ENERGY_MAX_CH) {
+        e->wh[ch] += wh;
     }
 }
 
 double rbamp_energy_wh_get(const rbamp_energy_t *e, uint8_t ch)
 {
+    if (ch == RBAMP_ENERGY_CH_TOTAL) {
+        return e->wh_total;
+    }
     if (ch >= RBAMP_ENERGY_MAX_CH) {
         return 0.0;
     }
@@ -39,7 +54,9 @@ double rbamp_energy_wh_get(const rbamp_energy_t *e, uint8_t ch)
 
 void rbamp_energy_reset_ch(rbamp_energy_t *e, uint8_t ch)
 {
-    if (ch < RBAMP_ENERGY_MAX_CH) {
+    if (ch == RBAMP_ENERGY_CH_TOTAL) {
+        e->wh_total = 0.0;
+    } else if (ch < RBAMP_ENERGY_MAX_CH) {
         e->wh[ch] = 0.0;
     }
 }
@@ -49,4 +66,5 @@ void rbamp_energy_reset_all_ch(rbamp_energy_t *e)
     for (uint8_t ch = 0; ch < RBAMP_ENERGY_MAX_CH; ++ch) {
         e->wh[ch] = 0.0;
     }
+    e->wh_total = 0.0;
 }

@@ -17,8 +17,21 @@ and multi-module fleets on one bus.
   mains frequency, per channel.
 - **Period energy** — latched average power and a Wh accumulator integrated
   from the device's canonical period duration.
-- **Multi-channel** — variant-aware (UI1/UI2/I1/I2/I3); per-channel reads and
-  mixed current-transformer configuration.
+- **Multi-channel** — the channel count follows the module (1, 2, 3, 5 or 7
+  channels); per-channel reads and mixed current-transformer configuration,
+  with a read-before-write guard for modules calibrated with their sensor.
+- **Two module lines, one API** — the current module line and the STD line
+  (16-bit register map: reactive / apparent power, THD, per-channel energy
+  counters, latch banks, firmware update session checks) behind the same
+  handle.
+- **Data-ready line and compact reads** — wait on the module's DRDY pin or
+  poll; read one measurement window in a single transaction
+  (`rbamp_read_digest`), with the module's own window length and uptime in
+  the period snapshot and a resume path after a master outage.
+- **Sensor-model registry** — nominal, clip-onset and peak current per
+  sensor model (`rbamp_sensor_model_limits`), and on the current line a
+  correction of the readings to the selected SCT-013 model where the module
+  firmware keeps its 30 A calibration (`rbamp_sct_correction`).
 - **Fleet / multi-module** — bus scan with duplicate-address detect-and-exclude,
   one-virgin-at-a-time provisioning (two-phase address commit), General-Call
   fleet-synchronous latch, and aggregated power / energy.
@@ -27,13 +40,20 @@ and multi-module fleets on one bus.
 
 ## Install
 
-From the ESP Component Registry:
+As a git dependency in your project's `main/idf_component.yml` (the
+component manager fetches the tagged release):
 
-```sh
-idf.py add-dependency "rbamp/rbamp^1.5"
+```yaml
+dependencies:
+  rbamp:
+    git: https://github.com/rb-amp/rbamp-esp-idf.git
+    version: v1.7.2
 ```
 
-Or vendor the `rbamp` directory into your project's `components/`.
+Or vendor this repository into your project as `components/rbamp/` (the
+directory name is the component name). The ESP Component Registry package
+`rbamp/rbamp` follows these releases; use `idf.py add-dependency
+"rbamp/rbamp^1.7"` once that version is listed there.
 
 ## Quick start
 
@@ -85,9 +105,15 @@ documented with Doxygen.
 | [`include/rbamp_fleet.h`](include/rbamp_fleet.h) | Multi-module bus manager: `rbamp_fleet_create`, `rbamp_fleet_scan`, `rbamp_provision`, `rbamp_fleet_assign_address`, `rbamp_fleet_poll_all`, `rbamp_fleet_enable_gc_all` / `rbamp_fleet_gclatch` / `rbamp_fleet_check_sync`, `rbamp_fleet_total_power` / `rbamp_fleet_total_energy_wh`, conflict detect-and-exclude. |
 | [`include/rbamp_energy.h`](include/rbamp_energy.h) | Internal Wh accumulator (used through the `rbamp_energy_*` wrappers in `rbamp.h`). |
 
+> **Persisting the energy snapshot:** if your application saves
+> `rbamp_std_energy_t` (NVS, file), store the individual fields you need in
+> your own fixed format, not the struct as a raw blob — the structure gains
+> fields across component versions and an old blob will not match the new
+> size.
+
 ## Examples
 
-Eight runnable projects under [`examples/`](examples/):
+Nine runnable projects under [`examples/`](examples/):
 
 | Example | Shows |
 |---|---|
@@ -99,12 +125,14 @@ Eight runnable projects under [`examples/`](examples/):
 | `spiffs_logger` | Per-minute CSV logging to SPIFFS. |
 | `deep_sleep_logger` | RTC-persisted Wh across deep sleep. |
 | `fleet_sync` | Fleet scan → General-Call sync → aggregated power / energy. |
+| `std_meter` | STD line: reactive / apparent power, THD, a master-timed energy bank in Wh. |
 
 ## Configuration
 
 `idf.py menuconfig` → *Component config → rbAmp client*: default I²C frequency,
-transaction timeout, NACK retry attempts / gap, log level, and an option to
-compile out the energy accumulator.
+transaction timeout, clock-stretch tolerance, NACK retry attempts / gap,
+data-ready polling interval, the SCT-013 rating correction, log level, and an
+option to compile out the energy accumulator.
 
 ## Supported targets
 

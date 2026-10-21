@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define RBAMP_SENSOR_MODELS_CRC32 0x26E5AB57u
+#define RBAMP_SENSOR_MODELS_CRC32 0xBC25EF19u
 #define RBAMP_SENSOR_MODELS_VERSION 1
 
 /* ---- Sensor classes (REG_SENSOR_CLASS 0x25) ---- */
@@ -66,29 +66,33 @@ typedef struct {
     const char *name;        /* short name, RBAMP_CT_ prefix stripped */
     const char *descriptor;  /* human string for init-time logging */
     uint8_t     status;
+    float       nominal_a;   /* rated RMS current, A; 0 = unknown */
+    float       fs_a;        /* RMS at clip onset for a SINE, A; 0 = unknown */
+    float       peak_a;      /* instantaneous clip ceiling, A; a distorted load
+                              * clips at peak_a / crest factor; 0 = unknown */
 } rbamp_sensor_model_info_t;
 
 static const rbamp_sensor_model_info_t RBAMP_SENSOR_MODELS[] = {
-    { 1,  1, "SCT013_005", "SCT-013-005, 5 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 1,  2, "SCT013_010", "SCT-013-010, 10 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 1,  3, "SCT013_030", "SCT-013-030, 30 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 1,  4, "SCT013_050", "SCT-013-050, 50 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 1,  5, "SCT013_100", "SCT-013-100, 100 A", RBAMP_MODEL_STATUS_RESERVED },
-    { 1,  6, "SCT013_020", "SCT-013-020, 20 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 1,  7, "SCT013_060", "SCT-013-060, 60 A", RBAMP_MODEL_STATUS_RESERVED },
-    { 2,  1, "TOROID_1000", "Toroid 1:1000, 196 R burden", RBAMP_MODEL_STATUS_LEGACY },
-    { 2,  2, "TOROID_2000", "Toroid 1:2000, 370 R burden", RBAMP_MODEL_STATUS_LEGACY },
-    { 2,  3, "TOROID_3000", "Toroid 1:3000, 572 R burden", RBAMP_MODEL_STATUS_LEGACY },
-    { 2,  4, "CT2000_92R", "CT 2000:1, 92 R burden", RBAMP_MODEL_STATUS_LEGACY },
-    { 2,  5, "CLAMP2000_92R", "Clamp 2000:1, 92 R burden", RBAMP_MODEL_STATUS_LEGACY },
-    { 2,  6, "CLAMP2000_1A", "Clamp 2000:1, 1 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 2,  7, "CLAMP2000_5A", "Clamp 2000:1, 5 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 2,  8, "CLAMP2000_10A", "Clamp 2000:1, 10 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 2,  9, "CLAMP2000_20A", "Clamp 2000:1, 20 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 2, 10, "CLAMP2000_30A", "Clamp 2000:1, 30 A", RBAMP_MODEL_STATUS_RESERVED },
-    { 2, 11, "CLAMP2000_50A", "Clamp 2000:1, 50 A", RBAMP_MODEL_STATUS_RESERVED },
-    { 2, 12, "CLAMP2000_80A", "Clamp 2000:1, 80 A", RBAMP_MODEL_STATUS_CHARACTERIZED },
-    { 2, 13, "CLAMP2000_100A", "Clamp 2000:1, 100 A", RBAMP_MODEL_STATUS_RESERVED },
+    { 1,  1, "SCT013_005", "SCT-013-005, 5 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 5.0f, 4.79f, 6.77f },
+    { 1,  2, "SCT013_010", "SCT-013-010, 10 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 10.0f, 9.58f, 13.54f },
+    { 1,  3, "SCT013_030", "SCT-013-030, 30 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 30.0f, 28.74f, 40.62f },
+    { 1,  4, "SCT013_050", "SCT-013-050, 50 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 50.0f, 47.9f, 67.7f },
+    { 1,  5, "SCT013_100", "SCT-013-100, 100 A", RBAMP_MODEL_STATUS_RESERVED, 100.0f, 95.8f, 135.4f },
+    { 1,  6, "SCT013_020", "SCT-013-020, 20 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 20.0f, 19.16f, 27.08f },
+    { 1,  7, "SCT013_060", "SCT-013-060, 60 A", RBAMP_MODEL_STATUS_RESERVED, 60.0f, 57.48f, 81.24f },
+    { 2,  1, "TOROID_1000", "Toroid 1:1000, 196 R burden", RBAMP_MODEL_STATUS_LEGACY, 0.0f, 0.0f, 0.0f },
+    { 2,  2, "TOROID_2000", "Toroid 1:2000, 370 R burden", RBAMP_MODEL_STATUS_LEGACY, 0.0f, 0.0f, 0.0f },
+    { 2,  3, "TOROID_3000", "Toroid 1:3000, 572 R burden", RBAMP_MODEL_STATUS_LEGACY, 0.0f, 0.0f, 0.0f },
+    { 2,  4, "CT2000_92R", "CT 2000:1, 92 R burden", RBAMP_MODEL_STATUS_LEGACY, 0.0f, 0.0f, 0.0f },
+    { 2,  5, "CLAMP2000_92R", "Clamp 2000:1, 92 R burden", RBAMP_MODEL_STATUS_LEGACY, 0.0f, 0.0f, 0.0f },
+    { 2,  6, "CLAMP2000_1A", "Clamp 2000:1, 1 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 1.0f, 1.27f, 1.8f },
+    { 2,  7, "CLAMP2000_5A", "Clamp 2000:1, 5 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 4.6f, 5.75f, 8.18f },
+    { 2,  8, "CLAMP2000_10A", "Clamp 2000:1, 10 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 10.18f, 12.73f, 18.0f },
+    { 2,  9, "CLAMP2000_20A", "Clamp 2000:1, 20 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 20.4f, 25.5f, 36.0f },
+    { 2, 10, "CLAMP2000_30A", "Clamp 2000:1, 30 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 29.95f, 37.4f, 52.9f },
+    { 2, 11, "CLAMP2000_50A", "Clamp 2000:1, 50 A", RBAMP_MODEL_STATUS_RESERVED, 50.91f, 63.6f, 90.0f },
+    { 2, 12, "CLAMP2000_80A", "Clamp 2000:1, 80 A", RBAMP_MODEL_STATUS_CHARACTERIZED, 76.8f, 95.9f, 135.0f },
+    { 2, 13, "CLAMP2000_100A", "Clamp 2000:1, 100 A", RBAMP_MODEL_STATUS_RESERVED, 101.82f, 127.3f, 180.0f },
 };
 #define RBAMP_SENSOR_MODEL_COUNT (sizeof(RBAMP_SENSOR_MODELS) / sizeof(RBAMP_SENSOR_MODELS[0]))
 

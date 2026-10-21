@@ -8,7 +8,7 @@
  *   loop, then one shared settle, then per-device
  *   @c rbamp_read_period_snapshot with @c skip_latch=true. Skew at 100 kHz
  *   is roughly 200-400 µs per I²C transaction (write 2 bytes + STOP) — far
- *   below the 200 ms RT window, so energy integration error is < 0.2 % per
+ *   below the 100 ms publish window, so energy integration error is < 0.2 % per
  *   period. For billing-grade sync (≥ 8 modules) use Strategy 2 — opt each
  *   module in to GC via @c REG_FLEET_CONFIG bit 0, then call
  *   ::rbamp_broadcast_latch (truth-doc §5).
@@ -86,8 +86,18 @@ void app_main(void)
         }
         const uint32_t sync_us = (uint32_t)(esp_timer_get_time() - sync_start_us);
 
-        /* 2. Single shared settle for all modules. */
-        vTaskDelay(pdMS_TO_TICKS(50));
+        /* 2. Single shared settle for all modules. BASIC modules need 50 ms;
+         *    an STD-line module services its latch at its next measurement
+         *    window (100 ms on current images, up to ~160 ms on earlier ones;
+         *    the 300 ms settle constant is the safe upper bound), so a mixed
+         *    fleet waits for the slowest line. */
+        uint32_t settle_ms = 50;
+        for (size_t i = 0; i < N_MODULES; ++i) {
+            if (modules[i] && rbamp_line(modules[i]) == RBAMP_LINE_STD) {
+                settle_ms = RBAMP_STD_SETTLE_MS_LATCH_PERIOD;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(settle_ms));
 
         /* 3. Read each module's snapshot — skip the latch, already happened. */
         ESP_LOGI(TAG, "sync_us=%u", (unsigned)sync_us);

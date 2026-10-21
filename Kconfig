@@ -25,6 +25,20 @@ menu "rbAmp client"
             milliseconds when the snapshot window latches). Defaults to
             100 ms, comfortable for both 100 kHz and 400 kHz buses.
 
+    config RBAMP_I2C_SCL_WAIT_US
+        int "SCL clock-stretch tolerance (us)"
+        range 2000 60000
+        default 10000
+        help
+            How long the I2C peripheral lets the module hold SCL low
+            before it gives up on the transaction. The driver default is
+            2 ms; a module stretches SCL for longer while it erases a
+            flash sector during a firmware update, and every such stretch
+            then ends in an "I2C hardware timeout" log line and a retry.
+            10 ms covers the sector erase. The original ESP32 cannot wait
+            longer than about 13 ms (20-bit hardware counter); the
+            component clamps the value there on that target.
+
     config RBAMP_NACK_RETRY_ATTEMPTS
         int "I2C NACK retry attempts"
         range 1 10
@@ -46,6 +60,46 @@ menu "rbAmp client"
             slave's I2C peripheral to flush its ADDR-phase state after a
             failed transaction. 5 ms is empirically sufficient on bench
             hardware.
+
+    config RBAMP_BUS_RESET_ON_RETRY_EXHAUSTION
+        bool "Reset the I2C bus before the final retry attempt"
+        default n
+        help
+            When all NACK retries of a transaction fail, call
+            i2c_master_bus_reset() once before the last attempt. The IDF
+            i2c_master driver already resets its state machine and clears
+            the bus after every failed transaction, and the explicit reset
+            takes no bus lock: with several tasks sharing the bus it can
+            interrupt another task's transaction (on ESP32 it drives a STOP
+            on the pins, which the driver's interrupt handler can mistake
+            for the end of a read). Leave off unless the master is single-
+            task and the bus is seen to stay wedged after driver errors.
+
+    config RBAMP_SCT_RATING_CORRECTION
+        bool "Correct SCT-013 readings on firmware that keeps the 030 calibration"
+        default y
+        help
+            A current-sensor module of class 1 is calibrated with the 30 A
+            sensor. Firmware up to 1.4.19 keeps that calibration after the
+            user switches the channel to another sensor model, so the module
+            reads with the wrong scale after a restart. With this option the
+            library reads the gain the module applies and scales current,
+            power, period power, energy and the digest to the selected model
+            (rbamp_sct_correction reports the outcome per channel). A module
+            that reports the self-correction capability bit (firmware 1.4.20
+            and later) corrects itself; the option then has no effect. Turn
+            off to read the module's raw values.
+
+    config RBAMP_DRDY_POLL_MS
+        int "Data-ready polling interval without a DRDY line (ms)"
+        range 5 50
+        default 20
+        help
+            When a handle has no DRDY GPIO, rbamp_wait_data_ready polls the
+            module's publish counter (STD) or commit sequence (BASIC) at this
+            interval. The module publishes every 100 ms (older images:
+            200 ms); 20 ms keeps the reaction at a fifth of that at 1-2 %
+            bus load per module.
 
     config RBAMP_DISABLE_ENERGY
         bool "Disable built-in Wh accumulator"
