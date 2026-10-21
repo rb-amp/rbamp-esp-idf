@@ -4,6 +4,9 @@ All notable changes to this component are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
+Public releases resume with this version; intermediate versions were released
+internally only.
+
 ## 1.7.2 — SCT-013 rating correction, resume after master downtime, one-transaction window reads (2026-10-21)
 
 First public release since 1.5.0. It carries 1.6.0 – 1.7.2 together: the STD
@@ -13,10 +16,10 @@ and phase quantities, a channel count that follows the module (1, 2, 3, 5 or
 resume after a master outage, and the SCT-013 rating correction for current-
 line modules whose firmware keeps the 30 A calibration (firmware reporting
 capability bit 12 corrects itself). Hardware validation of this line was done
-on a hub running ESP-IDF 5.4.1.
+on a host running ESP-IDF 5.4.1.
 
 ### Added
-- SCT-013 rating switch (`libs/spec/SCT_RATING_SWITCH.md`): a current-sensor
+- SCT-013 rating switch: a current-sensor
   module of class 1 is calibrated with the 30 A sensor, and firmware up to
   1.4.19 keeps that calibration after the user binds another model. The
   library now reads the gain the module applies at `rbamp_begin()`, after a
@@ -84,7 +87,7 @@ on a hub running ESP-IDF 5.4.1.
   state machine after every failed transaction already, and the explicit
   reset takes no bus lock: when another task has a transaction in flight it
   drives a STOP on the live pins, which the driver's interrupt handler can
-  take for the end of a read and crash in the ISR (seen on a hub with a
+  take for the end of a read and crash in the ISR (seen on a host with a
   hot-plugged module). `CONFIG_RBAMP_BUS_RESET_ON_RETRY_EXHAUSTION` restores
   the old behaviour for a single-task master.
 - `rbamp_set_sensor_class()`, `rbamp_set_ct_model()`,
@@ -109,7 +112,7 @@ on a hub running ESP-IDF 5.4.1.
 - `rbamp_read_all()` / `rbamp_read_all_ready()` on a module with more than
   three channels (UI5/UI7, BASIC or STD) wrote channels 3+ past the
   three-entry arrays of `rbamp_snapshot_t`: `frequency`, `topology` and
-  `channels` were overwritten (the hub then saw `channels` = 0) and the last
+  `channels` were overwritten (the host then saw `channels` = 0) and the last
   channel landed four bytes past the struct, on the caller's stack. The call
   now fills ch0-2 only (`RBAMP_SNAPSHOT_CHANNELS`), exactly as the period
   snapshot does; ch3+ stay on `rbamp_read_channel()` /
@@ -126,7 +129,7 @@ on a hub running ESP-IDF 5.4.1.
   voltage presence from the module's variant register; three channels remain
   only the fallback for firmware that does not publish a variant.
   `rbamp_new_with_topology()` keeps pinning the count as before (a warning is
-  logged when the module disagrees). Reported from a hub running a UI1;
+  logged when the module disagrees). Reported from a host running a UI1;
   validated there: a UI1 module reports one channel and the UI1 variant after
   `rbamp_begin()`.
 - `rbamp_read_variant()` on the BASIC line returned UNKNOWN for the UI5 / UI7
@@ -144,14 +147,10 @@ on a hub running ESP-IDF 5.4.1.
 Support for module firmware 0x0001007A / 0x0001007B. Every addition is
 gated on what the module reports; older modules behave exactly as before.
 
-Validated on STD-UI1 and STD-U3I3 modules with firmware 0x0001007B in a hub
+Validated on STD-UI1 and STD-U3I3 modules with firmware 0x0001007B on a host
 application: starting-current get/set and read-back, phase angles and phase
 sequence on a three-phase module, fine energy flags, energy delta across
 module restarts.
-
-rc2: bench program `std_uwh_bench_main.c` fixed to the 4-argument
-`rbamp_read_period_snapshot`; the host test harness now also compiles every
-bench program against the public header. No component code changed.
 
 ### Added
 - **Energy at µWh / µvarh resolution** in `rbamp_std_energy_t`:
@@ -296,19 +295,28 @@ behaviour of existing calls on the STD line is tightened.
   (source-compatible; rebuild dependants).
 - Component now requires `esp_driver_gpio` (built-in IDF component).
 
-## 1.5.0 — Per-channel CT model on every channel
+## 1.5.0 — Per-channel CT model on every channel (2026-09-04)
 
+### Added
 - `rbamp_set_ct_model_ch` / `rbamp_read_ct_model_ch` / `rbamp_configure_channels`
-  accept any channel up to the detected channel count.
-- Sensor class and CT model persist on production modules (user-config save).
+  accept any channel up to the detected channel count (channels 3+ through the
+  channel window).
 - Model codes and descriptors come from the generated `rbamp_sensor_models.h`
-  (`rbamp_sensor_model_lookup`).
+  (`rbamp_sensor_model_lookup`); unknown codes are rejected by the module and
+  surfaced to the caller.
+
+### Fixed
+- Sensor class and CT model now persist on production modules: the previous
+  save opcode did not persist to flash on production firmware, so the binding
+  applied to RAM and was lost on the next reboot. No API change, same ~700 ms
+  settle.
 
 ## 1.4.0 — Five- and seven-channel modules
 
+### Added
 - Topology `FIVE_CH` / `SEVEN_CH`, variants `UI5` / `UI7`,
   `RBAMP_MAX_CHANNELS` = 7; `rbamp_read_channel`, `rbamp_read_all_channels`,
-  `rbamp_read_commit_seq`. Period snapshot integrates all channels.
+  `rbamp_read_commit_seq`. The period snapshot integrates all channels.
 
 ## 1.3.0 — Initial public release
 
