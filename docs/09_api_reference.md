@@ -463,13 +463,14 @@ you can cast it back to `uint8_t`. Values:
 | Code | SKU | I channels | U channel |
 |---|---|---|---|
 | `1` | UI1 | 1 | yes |
+| `2` | UI2 | 2 | yes |
+| `3` | UI3 | 3 | yes |
 | `4` | I1 | 1 | no |
 | `5` | I2 | 2 | no |
 | `6` | I3 | 3 | no |
 
-Codes `2` (UI2) and `3` (UI3) are reserved for roadmap variants and
-do not appear on current hardware. The behavior is read-only,
-ROM-stored, changed only by factory reflashing.
+The value is read-only, ROM-stored, changed only by factory
+reflashing.
 
 ### `rbamp_read_capability`
 
@@ -1510,7 +1511,7 @@ The authoritative SKU byte is register `0x55` (`rbamp_hw_variant()`):
 |---|---|
 | `0x01` | UI1 (1× I + U) |
 | `0x02` | UI2 (2× I + U) |
-| `0x03` | UI3 (3× I + U) — **roadmap, not buildable on the current MCU package** |
+| `0x03` | UI3 (3× I + U) |
 | `0x04` | I1  (1× I, no U) |
 | `0x05` | I2  (2× I, no U) |
 | `0x06` | I3  (3× I, no U) |

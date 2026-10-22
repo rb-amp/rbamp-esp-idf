@@ -72,7 +72,7 @@
 #define RBAMP_STD_REG_OTA_ACTIVE       0x0148U   /* u32  running bank base */
 #define RBAMP_STD_REG_OTA_BANK_SIZE    0x014CU   /* u32  flash bank size, device-reported (differs per module family) */
 #define RBAMP_STD_REG_FW_STAGED_VERSION 0x0150U   /* u32  version of staged image header */
-#define RBAMP_STD_REG_FW_PAGE_CRC      0x0154U   /* u16  DEPRECATED 2026-10-08 (family-OTA baton Q4): CRC16 polynomial was never pinned and no fw/lib ever used it */
+#define RBAMP_STD_REG_FW_PAGE_CRC      0x0154U   /* u16  DEPRECATED 2026-10-08: CRC16 polynomial was never pinned and no fw/lib ever used it */
 #define RBAMP_STD_REG_FW_ACTIVE_BANK   0x0156U   /* u8  running bank id 0=A/1=B (v0x35 */
 #define RBAMP_STD_REG_OTA_PCRC_EXP     0x0170U   /* u32  optional expected CRC-32 (zlib, same poly as image) of the 256B payload */
 #define RBAMP_STD_REG_OTA_PCRC_RX      0x0174U   /* u32  CRC-32 of the payload as received */

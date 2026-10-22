@@ -38,7 +38,7 @@ First public release of the `rbamp` component for ESP-IDF v5.x.
 - **Supported SKUs on current hardware**:
   `UI1` (mains meter: voltage + current + power + PF + energy),
   `I1` / `I2` / `I3` (sub-meters: current only, per channel). `UI2` / `UI3`
-  are on the roadmap.
+  followed in later firmware.
 - **Energy and power are computed only on UI variants** (which have a
   voltage front-end). On I variants, `rbamp_read_power` / `_power_factor`
   return `0.0f`; fleet aggregation of total-power / energy correctly

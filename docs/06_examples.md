@@ -1142,12 +1142,11 @@ void app_main(void) {
 The full project (with WiFi setup, MQTT publish, RTC magic-marker
 guards) — [`examples/deep_sleep_logger/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/deep_sleep_logger/).
 
-> 🛣 **Roadmap.** A future version of the component is expected to add
-> `rbamp_warm_begin()` — a lightweight init variant without the
-> CMD_LATCH_PERIOD primer, which will make it simpler to read
-> `rbamp_read_period_snapshot()` by default after a deep-sleep wake.
-> Until then — the pattern above (skip_latch=true + the master's RTC
-> timer) is canonical.
+> `rbamp_begin_resume()` (component 1.7.0 and later) is the init variant
+> without the CMD_LATCH_PERIOD primer, so `rbamp_read_period_snapshot()`
+> works directly after a deep-sleep wake. The pattern above
+> (skip_latch=true + the master's RTC timer) remains valid on older
+> component versions.
 
 **Energy budget** (ESP32-WROOM, 10-minute wakeup interval):
 

@@ -74,10 +74,8 @@ void bidirectional_loop(rbamp_handle_t dev) {
     int64_t t_prev_us = esp_timer_get_time();
 
     while (1) {
-        /* Sample RT power at 5 Hz — matches the firmware-commit
-         * cadence (200 ms per channel). Faster yields empty
-         * repeated reads, slower loses resolution on sharp load
-         * transitions. ±2 % accuracy is achievable for typical
+        /* Sample RT power at 5 Hz. Slower polling loses resolution
+         * on sharp load transitions; faster adds little for typical
          * mixed loads with an inverter. */
         vTaskDelay(pdMS_TO_TICKS(200));
 

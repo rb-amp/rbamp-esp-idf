@@ -180,8 +180,8 @@ If something doesn't add up, see [10_troubleshooting.md](10_troubleshooting.md).
 | SKU | I-channels | U-channel | Typical use |
 |---|---|---|---|
 | **UI1** | 1 | yes | A single load with **full power calculation** (P, PF, Q, Wh) — the typical mains meter |
-| UI2 | 2 | yes | **Roadmap** (deferred) — two independent loads on one phase with per-channel power |
-| UI3 | 3 | yes | **Roadmap** — not buildable on the current MCU package (needs a 4th ADC channel) |
+| **UI2** | 2 | yes | Two independent loads on one phase with per-channel power (1 U + 2 I) |
+| **UI3** | 3 | yes | Three loads on one phase with per-channel power (1 U + 3 I) |
 | **I1** | 1 | no | Sub-meter without power calculation (**current only**) — when mains metering is handled by a separate UI1 |
 | **I2** | 2 | no | Two-channel current sub-meter — per-circuit breakdown |
 | **I3** | 3 | no | Three-channel current sub-meter — per-circuit breakdown / dual-CT topology |
@@ -328,17 +328,17 @@ float read_combined_current(rbamp_handle_t dev) {
 
 ## Multi-channel modules — I2 and I3 (current-only)
 
-The current hardware for the multi-channel topology is **I2** (two
+The current-only modules for the multi-channel topology are **I2** (two
 current channels) and **I3** (three current channels). Both modules
 **have no U-channel**, so P / PF / Q calculation on the module side is
 impossible — they provide **per-channel current** (I_rms, I_peak on each
 channel) and nothing more.
 
-UI2 and UI3 (with a U-channel + multi-channel power) are listed in the
-roadmap, but **are not buildable on the current MCU package** (UI3 needs
-a 4th ADC channel, UI2 is deferred). Use I2/I3 as current sub-meters
-together with a separate **UI1** at the service entry, which provides
-mains energy + voltage.
+**UI2** and **UI3** add the U-channel (1 U + 2 I / 1 U + 3 I), so
+per-channel power is computed on the module. Where only a current
+breakdown is needed, use I2/I3 as current sub-meters together with a
+separate **UI1** at the service entry, which provides mains energy +
+voltage.
 
 ### Reading channels (I2 / I3)
 
@@ -372,7 +372,7 @@ if (i_sum > 0.01f) {
 
 > This is an **approximation**: splitting by current works when the PF is
 > roughly the same across all loads. For accurate per-load power
-> accounting, use a UI variant on each line (once UI2/UI3 become available).
+> accounting, use a UI variant (UI1 / UI2 / UI3) on each line.
 
 ### Applications of I2 / I3
 

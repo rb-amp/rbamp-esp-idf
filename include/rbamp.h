@@ -139,15 +139,14 @@ typedef enum {
  *
  * Source of truth for channel count and whether voltage / power are present
  * (v1.3 B1). UI-variants measure voltage + power; I-variants are current-only
- * (no @c U_rms, no @c P_real). UI3 is not buildable (the package has 3 ADC
- * channels + U; a 3-current + voltage variant would need 4). Branch on this
- * (and ::rbamp_read_capability) — never on @c REG_VERSION heuristics.
+ * (no @c U_rms, no @c P_real). Branch on this (and ::rbamp_read_capability)
+ * — never on @c REG_VERSION heuristics.
  */
 typedef enum {
     RBAMP_VARIANT_UNKNOWN = 0, /**< Not yet read / unsupported firmware. */
     RBAMP_VARIANT_UI1     = 1, /**< 1 current + voltage + power. */
     RBAMP_VARIANT_UI2     = 2, /**< 2 current + voltage + power. */
-    RBAMP_VARIANT_UI3     = 3, /**< Reserved — not buildable on the 3+U package. */
+    RBAMP_VARIANT_UI3     = 3, /**< 3 current + voltage + power. */
     RBAMP_VARIANT_I1      = 4, /**< 1 current, no voltage / power. */
     RBAMP_VARIANT_I2      = 5, /**< 2 current, no voltage / power. */
     RBAMP_VARIANT_I3      = 6, /**< 3 current, no voltage / power. */
@@ -1495,7 +1494,7 @@ esp_err_t rbamp_configure_channels(rbamp_handle_t dev, rbamp_sensor_class_t cls,
 /**
  * @brief Bare @c CMD_SAVE_GAINS — flush factory gain/noise registers to flash (700 ms block).
  *
- * @warning FACTORY path, DEVELOP-GATED: @c CMD_SAVE_GAINS is blocked in
+ * @warning FACTORY path: @c CMD_SAVE_GAINS is blocked in
  *          production firmware and silently no-ops there. It is NOT the path for
  *          user configuration — sensor class and CT models are @c user_config
  *          persistence and are saved by ::rbamp_save_user_config (called

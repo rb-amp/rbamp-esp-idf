@@ -84,7 +84,7 @@ typedef enum {
  * line below this comment is superseded by that rule:
  * clock; UPTIME_S (0x46) is seconds since the module booted (0 on firmware
  * that does not publish it). */
-#define RBAMPI_BASIC_COMMIT_MS_FAST   100u   /* v1.2+ images (10 kHz sampling) */
+#define RBAMPI_BASIC_COMMIT_MS_FAST   100u   /* v1.2+ images */
 #define RBAMPI_BASIC_COMMIT_MS_SLOW   200u   /* pre-v1.2 images */
 #define RBAMPI_BASIC_FROM_BOOT_TOL_MS 1500u
 #define RBAMPI_BASIC_WINDOW_LONG_MS   (6u * 3600u * 1000u)

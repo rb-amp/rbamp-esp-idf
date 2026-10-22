@@ -2,7 +2,7 @@
 
 ## Reporting Vulnerabilities
 
-If you find a security issue в any rbAmp software (firmware, libraries, integrations) or hardware:
+If you find a security issue in any rbAmp software (firmware, libraries, integrations) or hardware:
 
 📧 **security@rbamp.com**
 
@@ -34,7 +34,3 @@ We will:
 ## Hall of Fame
 
 We publicly thank security researchers who responsibly disclose issues. Your name (or handle) will appear here after the issue is resolved.
-
----
-
-Encrypted email preferred. PGP key (rotation 2026-Q3): _coming soon_
