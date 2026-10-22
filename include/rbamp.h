@@ -295,7 +295,7 @@ typedef struct {
     uint32_t uptime_s;     /**< Seconds since the module booted. */
     bool     maint;        /**< Maintenance mode active (STATUS bit 6). */
     uint8_t  group_status; /**< Map 0x36+: per-channel energy store: 0 ok · 1 new · 2 fault · 3 restarted at 0. */
-    uint16_t legal_noen;   /**< Billing-relevant operations executed outside maintenance mode (report-only gate). */
+    uint16_t legal_noen;   /**< Metrology-relevant operations executed outside maintenance mode (report-only gate). */
     uint8_t  reset_cause;  /**< Image 0x76+: cause of THIS boot, @c RBAMP_STD_RST_* bits (PIN · POWER · SOFTWARE = reset / activate / address change · IWDG · WWDG · LOW_POWER · OPTION_BYTE); PIN accompanies most internal resets, judge by the other bits. 0 below 0x76. */
     uint16_t boot_count;   /**< Image 0x76+: persisted boot counter (low 16 bits) — a master that missed a restart sees it step. 0 below 0x76. */
 } rbamp_std_health_t;
@@ -523,7 +523,7 @@ typedef struct {
  *
  * Energy integrates over @c master_dt_ms — the master's own wall-clock window
  * between successive consumed reads (esp_timer). @c latch_ms is diagnostic
- * only: it may read short under load; the billing window is @c master_dt_ms
+ * only: it may read short under load; the energy window is @c master_dt_ms
  * or @c module_window_ms.
  *
  * @c module_window_ms is the module's own measure of the latched window
@@ -1062,7 +1062,7 @@ esp_err_t rbamp_read_period_latch_ms(rbamp_handle_t dev, uint32_t *out);
  * Recommended entry point for period metering. Sequence:
  * 1. Write @c CMD_LATCH_PERIOD (skipped if @c skip_latch is true).
  * 2. Capture the master wall-clock and compute @c master_dt_ms since the
- *    previous consumed read (the billing energy window — esp_timer; the
+ *    previous consumed read (the energy window — esp_timer; the
  *    chip's 0xEC is diagnostic only).
  * 3. @c vTaskDelay(settle_ms) — default 50 ms per SPEC.
  * 4. Read @c REG_V03_PERIOD_VALID; return @c ESP_ERR_INVALID_RESPONSE if 0
@@ -2182,7 +2182,7 @@ esp_err_t rbamp_std_wait_idle(rbamp_handle_t dev, uint32_t timeout_ms);
  * reset — a live indicator, not history) and an hourly ring in NVM (depth
  * follows the NVM size, ~7 h on the current part) that survives resets and
  * is the ring to BACKFILL from; both are written only while the module's
- * clock is valid, plus a never-erased event log of billing-relevant changes.
+ * clock is valid, plus a never-erased event log of metrology-relevant changes.
  * Each HOUR record carries the life-time counters ABSOLUTE at period end:
  * the period's grand energy is the difference of two consecutive records
  * (resets and gaps stay visible). Backfill after a master outage: walk

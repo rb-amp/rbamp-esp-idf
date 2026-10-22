@@ -49,7 +49,7 @@ void rbamp_energy_init(rbamp_energy_t *e);
  * @param[in]     avg_p      Per-channel average power for the period (W).
  * @param[in]     channels   Number of valid channels in @c avg_p (1..7); clamped
  *                           to ::RBAMP_ENERGY_MAX_CH.
- * @param[in]     period_ms  Elapsed duration of the billing window (ms). The
+ * @param[in]     period_ms  Elapsed duration of the energy window (ms). The
  *                           caller passes the MASTER wall-clock dt computed
  *                           from @c esp_timer_get_time() across consecutive
  *                           consumed reads (see ::rbamp_read_period_snapshot,
@@ -58,7 +58,7 @@ void rbamp_energy_init(rbamp_energy_t *e);
  *                           @note The device's own REG_V03_PERIOD_LATCH_MS
  *                           (0xEC) is diagnostic only (it may read short under
  *                           load) and must not feed energy integration. The
- *                           billing dt is the master wall-clock, or the
+ *                           energy-integration dt is the master wall-clock, or the
  *                           module's commit-counted window (0xBE) for the
  *                           first snapshot after rbamp_begin_resume.
  * @param[in]     valid      REG_V03_PERIOD_VALID bit at read time.
