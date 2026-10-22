@@ -16,7 +16,7 @@ and multi-module fleets on one bus.
 - **Real-time metering** — voltage, current, real power, power factor and
   mains frequency, per channel.
 - **Period energy** — latched average power and a Wh accumulator integrated
-  from the device's canonical period duration.
+  against the master's clock.
 - **Multi-channel** — the channel count follows the module (1, 2, 3, 5 or 7
   channels); per-channel reads and mixed current-transformer configuration,
   with a read-before-write guard for modules calibrated with their sensor.
@@ -51,13 +51,13 @@ dependencies:
 ```
 
 Or vendor this repository into your project as `components/rbamp/` (the
-directory name is the component name). The ESP Component Registry package
-`rbamp/rbamp` follows these releases; use `idf.py add-dependency
-"rbamp/rbamp^1.7"` once that version is listed there.
+directory name is the component name).
 
 ## Quick start
 
 ```c
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include "rbamp.h"
@@ -78,6 +78,9 @@ void app_main(void)
     rbamp_handle_t dev;
     ESP_ERROR_CHECK(rbamp_new(bus, 0x50, &dev));   /* default address */
     ESP_ERROR_CHECK(rbamp_begin(dev));             /* detect variant + prime */
+    /* One-time sensor setup (see docs/05_quickstart.md, Step 3): without it I stays 0. */
+    ESP_ERROR_CHECK(rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013));
+    ESP_ERROR_CHECK(rbamp_set_ct_model(dev, 3));    /* 3 = SCT-013-030 */
 
     while (1) {
         rbamp_snapshot_t s;
@@ -137,7 +140,7 @@ option to compile out the energy accumulator.
 ## Supported targets
 
 `esp32`, `esp32s2`, `esp32s3`, `esp32c2`, `esp32c3`, `esp32c6`, `esp32h2`.
-(`esp32p4` requires IDF ≥ 5.3; re-enabled once the minimum is bumped.)
+(`esp32p4` is not supported: it needs IDF ≥ 5.3, the component's minimum is 5.2.)
 
 ## ESP-IDF version policy
 

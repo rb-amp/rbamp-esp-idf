@@ -73,7 +73,7 @@ rbamp_new(bus, 0x52, &dev);   /* address from the bus scan */
 If the bus scan finds the module but `rbamp_read_voltage(dev, 0, &v)`
 periodically returns `ESP_FAIL` — this is a **documented baseline
 pattern**: the ESP-IDF v5 `i2c_master` driver has quirks when
-working with rbAmp on the current firmware (~20 % NACK rate at
+working with rbAmp on the current firmware (frequent NACKs at
 100 kHz).
 
 The mitigation is already built into the component
@@ -288,16 +288,14 @@ current.
 
 ### If all three steps pass but the current is still zero
 
-Then the signal at the ADC really is below the noise floor. Check:
+Then the signal at the module input really is below the noise floor. Check:
 
 - **Is current actually flowing** — measure with a multimeter (DC
   clamp / AC clamp meter) on the same wire.
 - **Is the clamp intact** — at the clamp connector there should be
   an AC voltage proportional to the current (a few millivolts for
   consumer loads).
-- **Are you clamping the right wire** — the line (phase), not
-  neutral (although a clamp on neutral will work too — it measures
-  the current amplitude, not direction).
+- **Are you clamping the right wire** — the line (phase) conductor, and only that one conductor (never the whole cable).
 
 ## Readings jump around or return `ESP_FAIL`
 
@@ -503,48 +501,14 @@ reference meter (Kill-A-Watt, etc.).
 ### Accumulator precision
 
 The Wh accumulator inside the handle is stored as a 64-bit `double`.
-Drift < 1 LSB / year at a 60 s cadence — for typical bench scenarios
-this causes no problems.
 
 If you built the component with `CONFIG_RBAMP_DISABLE_ENERGY=y`, the
 energy storage and API are removed from the binary entirely. In that
 case you must keep your own Wh counter in user code.
 
-### `snap.latch_ms` (chip software timer) — diagnostic, not for billing
+### `snap.latch_ms` — diagnostic, not for energy
 
-⚠ **`snap.latch_ms` (register 0xEC) diverges from the master
-wall-clock by 25–30%** under normal ISR load. This is a **chip
-software timer based on SysTick (HAL_GetTick)**; it's not a measure
-of chip quality, not oscillator drift, not data loss — it's a
-by-design characteristic of SysTick starvation on this MCU/ISR
-profile (root E.6/F10 HW-result 2026-06-14).
-
-The divergence **does not mean data loss**. RMS/power are sampled on
-the `TIM3 TRGO` hardware timer (IRQ-independent, wall-accurate);
-commits are also wall-accurate (`PERIOD_COMMIT_CNT 0xBE` increments
-5.02 times/s — exactly 200 ms).
-
-**Use the master wall-clock for energy integration**:
-
-```c
-// CORRECT — master wall-clock
-int64_t t_now_us = esp_timer_get_time();
-double  dt_s     = (t_now_us - t_prev_latch_us) / 1e6;
-energy_wh[ch] += avg_p[ch] * dt_s / 3600.0;
-t_prev_latch_us = t_now_us;
-
-// WRONG — chip software timer undercounts by 25–30 %
-double dt_chip_s = snap.latch_ms / 1000.0;
-energy_wh[ch] += avg_p[ch] * dt_chip_s / 3600.0;  // understated
-```
-
-### Acceptable divergence: chip timebase vs master clock
-
-**Canon**: up to **30 %** undercount of the chip timebase under load
-is **normal** (SysTick starvation, by design). Earlier user
-documentation cited 3 % — that's an **erroneous number** that would
-have mass-rejected healthy chips. Use 30 % as the acceptance
-threshold; below that, the chip is OK.
+`latch_ms` is a module diagnostic timer; do not use it for energy — use the master clock.
 
 ## ESP32 project hangs after a few minutes
 
@@ -746,20 +710,20 @@ THIS specific operation matters):
 ```c
 esp_err_t err = rbamp_save_user_config(dev);
 uint8_t dev_err;
-rbamp_read_u8(dev, 0x02, &dev_err);   /* IMMEDIATELY, before the next write */
+rbamp_read_last_error(dev, &dev_err);   /* IMMEDIATELY, before the next write */
 ```
 
 **Pattern 2 — durable error monitoring** (canonical for long-running):
 
 ```c
 uint8_t event_flags;
-rbamp_read_u8(dev, 0x2A, &event_flags);
-if (event_flags & (1 << 3)) {
+rbamp_read_event_flags(dev, &event_flags);
+if (event_flags & RBAMP_EVENT_ERROR) {
     uint8_t last_err;
-    rbamp_read_u8(dev, 0x02, &last_err);   /* what was the last rejected */
+    rbamp_read_last_error(dev, &last_err);   /* what was the last rejected */
     /* handle the error */
-    rbamp_write_u8(dev, 0x2A, (1 << 3));   /* W1C clear bit3 */
-    /* or CMD_CLEAR_ERROR */
+    rbamp_clear_error(dev);                  /* clears REG_ERROR ... */
+    rbamp_clear_event_flags(dev, RBAMP_EVENT_ERROR);  /* ... then the sticky bit */
 }
 ```
 
@@ -831,11 +795,9 @@ any `rbamp_set_*`.
 
 Possible causes:
 
-1. **Invalid model code** — the valid model codes are `{1, 2, 3, 4, 6}`
+1. **Invalid model code** — the valid model codes are `{1, 2, 3, 4, 5, 6, 7}`
    (see the table in [03 · Current sensor selection](03_sensor_selection.md)).
-   Code `6` (SCT-013-020) is valid; code `5` (SCT-013-100) is
-   **reserved/removed**. Values `0`, `5`, and `7+` return
-   `ESP_ERR_INVALID_ARG`.
+   Values `0` and `8+` return `ESP_ERR_INVALID_ARG`.
 2. **Invalid channel index** in the per-channel form
    `rbamp_set_ct_model_ch(dev, channel, code)` — must be <
    `rbamp_channels(dev)`.
@@ -931,10 +893,10 @@ The `rbamp_*` functions return standard `esp_err_t` values.
 |---|---|---|
 | `ESP_OK` (0) | success | — |
 | `ESP_FAIL` (-1) | NACK after retry; or the sanity filter rejected the value | "Module doesn't respond over I²C" section |
-| `ESP_ERR_INVALID_ARG` (0x102) | `dev == NULL`, `channel`/`phase` out of range, `code` not in {1,2,3,4,6}, reserved `cls` | check the call arguments |
+| `ESP_ERR_INVALID_ARG` (0x102) | `dev == NULL`, `channel`/`phase` out of range, an unrecognised `cls`, a value the module rejects | check the call arguments |
 | `ESP_ERR_TIMEOUT` (0x107) | `rbamp_wait_ready` expired (module not responding) OR the 5 s window between `prepare_address_change` and `commit_address_change` expired | for wait_ready — via `rbamp_probe()`; for commit — re-arm: `prepare` + `commit` back-to-back with no blocking I/O between them |
 | `ESP_ERR_INVALID_STATE` (0x103) | precondition: `set_ct_model*` before `set_sensor_class` | the `set_*` section above |
-| `ESP_ERR_NOT_SUPPORTED` (0x106) | the function is unavailable on the current SKU (e.g., the voltage API on an I* variant) | check `rbamp_hw_variant(dev)` |
+| `ESP_ERR_NOT_SUPPORTED` (0x106) | the function is unavailable on the current SKU (e.g., the voltage API on an I* variant) | check `rbamp_line(dev)` and `rbamp_variant(dev)` |
 | `ESP_ERR_INVALID_RESPONSE` (0x108) | period snapshot stale; or `REG_VERSION` = 0/0xFF on `rbamp_begin` | "Period snapshots are always stale" / "Module doesn't respond" section |
 | `ESP_ERR_NO_MEM` (0x101) | failed to allocate memory for the handle | check the heap budget (`esp_get_free_heap_size()`) |
 
@@ -964,7 +926,7 @@ persists, open an issue:
 
 In the issue, include:
 
-- **Target SoC** (ESP32 / S2 / S3 / C2 / C3 / C6 / H2 / P4) +
+- **Target SoC** (ESP32 / S2 / S3 / C2 / C3 / C6 / H2) +
   **ESP-IDF version** (output of `idf.py --version`).
 - **rbamp component version** (for example, 1.1.0).
 - **Module firmware version** — `rbamp_firmware_version(dev)` in the

@@ -15,9 +15,9 @@ chapter is a **distillation of the key logic**, not the full project
 | # | Scenario | Difficulty | Source |
 |:---:|---|:---:|---|
 | **1** | **Mains + N sub-loads — the 80% canon** | medium | [`examples/fleet_sync/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/fleet_sync/) |
-| **2** | **Provisioning workflow (virgin → fleet)** | low | [`examples/provision/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/provision/) |
-| **3** | **Multi-channel mixed-CT (I3, different models)** | medium | [`examples/multi_channel/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/multi_channel/) |
-| **4** | **Fleet GC sync — billing-grade synchronicity** | medium | [`examples/fleet_sync/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/fleet_sync/) |
+| **2** | **Provisioning workflow (virgin → fleet)** | low | (composition) |
+| **3** | **Multi-channel mixed-CT (I3, different models)** | medium | (composition) |
+| **4** | **Fleet GC sync — tariff-period synchronicity** | medium | [`examples/fleet_sync/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/fleet_sync/) |
 | 5 | Quick read (single module) | minimal | [`examples/quick_read/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/quick_read/) |
 | 6 | Wh meter on a 16×2 LCD | low | [`examples/lcd_period/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/lcd_period/) |
 | 7 | Monitoring 3 modules (legacy sequential) | low | [`examples/multi_module/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/multi_module/) |
@@ -30,13 +30,14 @@ chapter is a **distillation of the key logic**, not the full project
 | 14 | I3 with different CT per channel (mixed-load deep-dive) | medium | (composition) |
 | 15 | Sub-metering: 5×UI1 on a shared bus | high | (composition) |
 | 16 | GC broadcast latch for >8 modules | high | (composition) |
-| 17 | GC group filtering (multi-tenant billing) | high | (composition) |
+| 17 | GC group filtering (multi-tenant metering) | high | (composition) |
+| 18 | STD module: reactive / apparent power, THD, master-timed energy | medium | [`examples/std_meter/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/std_meter/) |
 
-> Scenarios 1–4 are the flagship ones, built around the library's canonical deployment. Their code uses the fleet API and is validated on bench hardware (a heterogeneous UI1+I2+I3 fleet). Scenarios 5–13 are single-module and compose patterns; 14–17 are extended fleet scenarios (a deep-dive into the capabilities introduced in 1–4). Scenario 7 is the legacy sequential per-module latch without the fleet API, kept for comparison and as a migration path.
+> Scenario 18 shows the STD module line. Scenarios 1–4 are the flagship ones, built around the library's canonical deployment. Their code uses the fleet API and is validated on bench hardware (a heterogeneous UI1+I2+I3 fleet). Scenarios 5–13 are single-module and compose patterns; 14–17 are extended fleet scenarios (a deep-dive into the capabilities introduced in 1–4). Scenario 7 is the legacy sequential per-module latch without the fleet API, kept for comparison and as a migration path.
 
 > All scenarios assume the sensor class and CT model have already
 > been configured via `rbamp_set_sensor_class()` + `rbamp_set_ct_model()`
-> (see [05 · Quickstart](05_quickstart.md) Step 4). This is done once
+> (see [05 · Quickstart](05_quickstart.md) Step 3). This is done once
 > at installation time — the settings are stored in the module's flash
 > and survive a reset.
 
@@ -61,6 +62,7 @@ Some scenarios use additional ESP-IDF components — add them to the
 | 11 — Event-based logging | — |
 | 12 — SPIFFS logger | `rbamp spiffs` |
 | 13 — Deep-sleep logger | `rbamp esp_sleep esp_wifi esp_event esp_netif nvs_flash mqtt` (if you publish) |
+| 18 — STD meter | — (`rbamp` only) |
 
 The networking components also require `nvs_flash_init()` in `app_main`
 and WiFi bring-up. For brevity, all of this is omitted in the snippets
@@ -109,8 +111,7 @@ topology"):
 - `@0x51` — I2, a two-channel current sub-meter (no voltage).
 - `@0x52` — I3, a three-channel current sub-meter (no voltage).
 
-The reference load on the line is ~0.57 A. Lib baseline — `94c5777`
-(with the fix for the 3-channel `configure_channels` ch0 mis-bind).
+The reference load on the line is ~0.57 A. 
 
 ### Code — integrated loop
 
@@ -205,7 +206,7 @@ void app_main(void) {
 }
 ```
 
-### Bench output (HW-validated on the full Fix-A fleet, lib `94c5777` + firmware Fix-A)
+### Bench output (hardware-validated on the full fleet)
 
 ```text
 INTEGRATED METERING SYSTEM — fleet_scan: 3 module(s), 0 excluded
@@ -224,10 +225,8 @@ ITER 1..N:  GC in_sync=3/3 skew=0 | poll n_ok=3/3 | P_total≈1260 W  | E_total:
                                                     pickup ≈ zero)
 ```
 
-> The bench figures come from uncalibrated DUTs and illustrate the
-> shape of the data and its flow through the system — **not**
-> metrological accuracy. For production accuracy, use calibrated
-> modules.
+> The bench figures illustrate the shape of the data and its flow
+> through the system — **not** measurement accuracy.
 
 ### Notes for deployment
 
@@ -242,13 +241,12 @@ ITER 1..N:  GC in_sync=3/3 skew=0 | poll n_ok=3/3 | P_total≈1260 W  | E_total:
   canon, `total_power` ≈ the power of the mains module. For **per-load**
   power on a sub-meter, compute it on the master side:
   `P_subload[k] ≈ V_mains × I_sub[k]` (an approximation, correct when
-  the PFs are close; exact per-load P will only be available once a
-  UI variant for sub-meters ships).
+  the PFs are close; a current-only sub-meter cannot report exact
+  per-load P).
 - **Energy (Wh) — master wall-clock.** `E_total` grows monotonically
   (2.55 → 6.94 Wh over the bench capture window); the component
   integrates each period by `master_dt_ms` (esp_timer), not by the
-  chip-side `latch_ms` (which underreported dt by **−26 %** in the
-  same session). A spurious tick adds `0 Wh` if no new period elapsed
+  chip-side `latch_ms` (a module diagnostic timer that can read short). A spurious tick adds `0 Wh` if no new period elapsed
   between polls — this is **normal** (snap.valid = 0 on that cycle).
 - **MISS-resilient polling.** If one of the modules drops off the bus
   (disconnect, reboot), `poll_all` flags it with `status[i] != ESP_OK`
@@ -265,19 +263,18 @@ ITER 1..N:  GC in_sync=3/3 skew=0 | poll n_ok=3/3 | P_total≈1260 W  | E_total:
 - **Per-channel currents → load disaggregation.** Through
   `fleet_poll_all` the master sees all current channels at once
   (1+2+3 = 6 on our bench fleet), without separate per-module readers.
-- **Mixed-CT on a 3-channel module requires lib ≥ `94c5777`.** This
-  fix closes the ch0 mis-bind bug on the 3-channel configuration —
-  before it, mirrors [1 2 3] on I3 would not settle. On I2 (2 channels)
-  the fix is not needed, but the bug only existed on 3-channel.
+- **Mixed-CT on a 3-channel module.** Use the current library release;
+  mirrors [1 2 3] on I3 settle as configured. The order in which the
+  channels are bound does not matter.
 - **Poll latency for production sizing (measured on HW).** On the bench
   @50 kHz I²C: 2 modules — avg `89.4 ms` (min 89.4 / max 89.6);
   3 modules — avg `112.1 ms` (min 112.1 / max 112.3). That is
   **≈ 22-23 ms per additional module**, linear and with very low jitter
   (min ≈ max). A single batched `fleet_poll_all` is deterministic on a
-  clean bus. A 3-module fleet (~112 ms) fits within a 200 ms RT window
-  — meaning a **5 Hz polling rate is achievable** without bus
-  saturation. The full bus budget (when the fleet exceeds the 200 ms
-  window) is in the table in [04 · Wiring](04_hardware.md), section
+  clean bus. A 3-module fleet (~112 ms) fits within a 200 ms polling interval
+  — meaning a **5 Hz polling rate is achievable** (every second
+  100 ms module window) without bus saturation. The full bus budget
+  (when the fleet exceeds the polling interval) is in the table in [04 · Wiring](04_hardware.md), section
   "Bus energy budget".
 
 ---
@@ -336,7 +333,7 @@ void provision_new_module(i2c_master_bus_handle_t bus,
 }
 ```
 
-**Bench output (HW-validated success path, lib `94c5777`):**
+**Bench output (hardware-validated success path):**
 
 ```text
 before: present(0x50)=yes  present(0x52)=no
@@ -415,8 +412,7 @@ void configure_mixed_ct(rbamp_handle_t dev_i3) {
 }
 ```
 
-**Bench output (HW-validated on a clean-reflashed I3, lib `94c5777` +
-`c8ac901`):**
+**Bench output (hardware-validated on a clean-reflashed I3):**
 
 ```text
 configure_channels(SCT013, {1, 3, 6}, 3) = ESP_OK
@@ -445,18 +441,15 @@ re-configuration of modules in the field, this turns into a meaningful
 wear cost. Always use `configure_channels` when you need to set the
 sensor class + per-channel CT models.
 
-> **Valid CT model codes (Bench-characterized).** On the current bench,
-> the following are validated and working for the SCT-013 family:
+> **Valid CT model codes.** For the SCT-013 family:
 > `1=SCT-013-005`, `2=SCT-013-010`, `3=SCT-013-030`, `4=SCT-013-050`,
-> `6=SCT-013-020`. Codes `5` (SCT-013-100) and `7` (SCT-013-060) are
-> **present in the API** but **not yet characterized on the current
-> rig** — attempting to use them yields `ESP_ERR_INVALID_ARG` /
-> `REG_ERROR=0xFE (ERR_PARAM)`. In production, use only the
-> characterized codes `{1, 2, 3, 4, 6}`.
+> `5=SCT-013-100`, `6=SCT-013-020`, `7=SCT-013-060`. A code outside
+> `{1, 2, 3, 4, 5, 6, 7}` yields `ESP_ERR_INVALID_ARG` /
+> `REG_ERROR=0xFE (ERR_PARAM)`.
 
 ---
 
-## Scenario 4 — Fleet GC sync (billing-grade synchronicity)
+## Scenario 4 — Fleet GC sync (tariff-period synchronicity)
 
 **Goal:** demonstrate an atomic latch across the whole fleet with a
 single I²C General-Call frame. Unlike the sequential per-module
@@ -519,7 +512,7 @@ round 9  tick=9  in_sync=3/3   skew=0
 
 **When to use GC sync:**
 
-- **Billing-grade synchronicity.** If the per-minute/per-second
+- **Tight synchronization.** If the per-minute/per-second
   snapshot difference between modules matters for reporting (for
   example, a balance calculation `mains − Σ(sub)` integrated over time
   — module skew introduces a systematic error), GC delivers `skew = 0`
@@ -664,15 +657,15 @@ with their WARNING notes).
 > **The canonical pattern for v1 firmware** is a sequential
 > `rbamp_latch_period()` on each device + a single shared 50 ms settle
 > + per-device `rbamp_read_period_snapshot(skip_latch=true)`.
-> Inter-device skew at 100 kHz: ~1 ms per device, < 0.2 % of a
-> 60-second period.
+> Inter-device skew at 100 kHz: ~1 ms per device — negligible
+> against a 60-second period.
 >
 > On v1.3 firmware (`REG_VERSION = 0x04`) `rbamp_broadcast_latch()` is
 > fully supported once GC is enabled fleet-wide via
 > `rbamp_fleet_enable_gc_all()` — the canonical fleet-sync path for
-> billing-grade synchronization between sub-meters (see the `Strategy 2`
+> tight synchronization between sub-meters (see the `Strategy 2`
 > fleet-GC section earlier in this chapter). On legacy v1.0-v1.2
-> firmware (no `CAP_GC_LATCH` capability bit) the call returns
+> firmware (no General-Call latch support) the call returns
 > `ESP_ERR_NOT_SUPPORTED` and the library falls back to the per-device
 > latch shown above. See
 > [09 · API Reference](09_api_reference.md)
@@ -802,7 +795,7 @@ For HA MQTT Auto-discovery based on this pattern — see
 gross-export. Use this pattern on the BASIC tier, where the
 **firmware** clips negative values in `snap.avg_p[ch]` (period-averaged
 power) — sample `rbamp_read_power(dev, 0, &p)` (instantaneous power,
-**signed on all tiers**) at 5 Hz on the master side and bucket it
+**signed on all tiers**) at 10 Hz on the master side and bucket it
 yourself.
 
 ```c
@@ -820,7 +813,7 @@ void bidir_task(void *arg) {
     int64_t t_prev_us = esp_timer_get_time();
 
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(200));   /* 5 Hz, matches the RT cadence */
+        vTaskDelay(pdMS_TO_TICKS(100));   /* 10 Hz, matches the RT cadence */
         const int64_t t_now_us = esp_timer_get_time();
         const double  dt_s     = (double)(t_now_us - t_prev_us) / 1e6;
         t_prev_us = t_now_us;
@@ -843,11 +836,12 @@ void bidir_task(void *arg) {
 }
 ```
 
-This is a composite scenario with no dedicated IDF project. On the
-future STANDARD / PRO firmware tiers (planned for v1.3+) the period
-accumulator `rbamp_energy_wh(dev, 0)` will already return a signed net
-balance — this master-side split is only needed for separate
-gross-consume / gross-export reporting.
+This is a composite scenario with no dedicated IDF project. On an STD
+module the energy counters are signed and `rbamp_energy_wh(dev, 0)`
+returns a net balance (import and export are kept separately in
+`rbamp_std_read_energy()`) — this master-side split is only needed on
+BASIC modules, or for separate gross-consume / gross-export reporting
+from the real-time power.
 
 ---
 
@@ -905,7 +899,7 @@ void app_main(void) {
 ```
 
 For an explicit gross-consume / gross-export split on the mains —
-combine with the pattern from Scenario 5 (a separate 5 Hz task on
+combine with the pattern from Scenario 5 (a separate 10 Hz task on
 `rbamp_read_power(mains_dev, 0, ...)`).
 
 This is a composite scenario with no dedicated IDF project — assemble
@@ -916,7 +910,7 @@ it from [`examples/mqtt_publisher/`](https://github.com/rb-amp/rbamp-esp-idf/tre
 
 ## Scenario 11 — Event-based logging (EMA)
 
-**Goal:** on each 200 ms RT window, compare instantaneous power against
+**Goal:** on each 100 ms RT window, compare instantaneous power against
 an exponential moving average. Log significant deviations — loads such
 as a microwave, a kettle, or a hair dryer "appear" in the log as a
 turn-on / turn-off event.
@@ -1211,15 +1205,15 @@ void mixed_load_task(void *arg) {
 
 ## Scenario 15 — Sub-metering: 5×UI1 on a shared bus
 
-**Goal:** monitor 5 independent lines in a single-phase apartment with **billing-grade synchronicity** of periods. One UI1 per line (5 modules total).
+**Goal:** monitor 5 independent lines in a single-phase apartment with **tariff-period synchronicity** of periods. One UI1 per line (5 modules total).
 
-This is **strategy 1** for period sync from [04 · Wiring](04_hardware.md#period-sync--synchronizing-periods-for-billing-grade-metering): sequential latch + shared settle.
+This is **strategy 1** for period sync from [04 · Wiring](04_hardware.md#period-sync--synchronizing-periods-for-tight-synchronization): sequential latch + shared settle.
 
 ```c
 #define N_METERS 5
 static rbamp_handle_t meters[N_METERS];   /* initialized in app_main */
 
-void sub_meter_billing_task(void *arg) {
+void sub_meter_task(void *arg) {
     int64_t period_start_us = esp_timer_get_time();
     const int64_t PERIOD_S = 60;   /* 60-second metering period */
 
@@ -1259,15 +1253,15 @@ void sub_meter_billing_task(void *arg) {
 }
 ```
 
-**Skew analysis:** 5 modules × ~1 ms/latch = ~5 ms. Relative to the 60-s period = 0.008%. Negligible for billing.
+**Skew analysis:** 5 modules × ~1 ms/latch = ~5 ms. Relative to the 60-s period = 0.008%. Negligible.
 
-**Bus budget**: 5 modules × ~5 ms RT block = 25 ms for a full round; this also fits at a 5 Hz polling rate (25 ms ≪ 200 ms). Bus headroom is comfortable up to ~15 UI1 modules.
+**Bus budget**: 5 modules × ~5 ms RT block = 25 ms for a full round; this also fits at a 5 Hz polling rate (25 ms ≪ 100 ms). Bus headroom is comfortable up to ~15 UI1 modules.
 
 ---
 
-## Scenario 16 — GC broadcast latch (billing-grade sync for >8 modules)
+## Scenario 16 — GC broadcast latch (tight sync for >8 modules)
 
-**Goal:** at ≥ 8 modules the skew of strategy 1 (sequential) approaches ~10 ms. For billing-grade synchronicity — **strategy 2**, General-Call broadcast.
+**Goal:** at ≥ 8 modules the skew of strategy 1 (sequential) approaches ~10 ms. For tariff-period synchronicity — **strategy 2**, General-Call broadcast.
 
 **Preconfiguration (once per module)**:
 
@@ -1284,7 +1278,7 @@ rbamp_reset(dev);              /* CMD_RESET, settle ~300 ms */
 ```c
 #define N_METERS 12
 
-esp_err_t billing_grade_latch(rbamp_handle_t meters[], int n,
+esp_err_t synced_latch(rbamp_handle_t meters[], int n,
                               uint16_t tick_counter) {
     /* GC frame: A5 27 <group> <tick_lo> <tick_hi> on addr 0x00 */
     uint8_t frame[5] = {
@@ -1335,13 +1329,13 @@ esp_err_t billing_grade_latch(rbamp_handle_t meters[], int n,
 
 **Skew analysis**: a GC frame is ~1 ms at 50 kHz → all 12 modules latch **simultaneously** at the bus level. Skew is practically 0.
 
-**When to use**: ≥ 8 modules and/or billing-grade accuracy.
+**When to use**: ≥ 8 modules and/or tight synchronization.
 
 **When NOT to use**: on a mixed bus with non-rbAmp devices (GC may conflict).
 
 ---
 
-## Scenario 17 — GC group filtering (multi-tenant billing)
+## Scenario 17 — GC group filtering (multi-tenant metering)
 
 **Goal**: 10 modules on a single bus, where you need to latch **subsets** independently. For example, 5 modules meter tariff A (daytime), 5 — tariff B (nighttime); they are armed and read on different schedules.
 
@@ -1368,7 +1362,7 @@ for (int i = 5; i < 10; i++) {
 **Runtime — independent latch per tariff**:
 
 ```c
-void daytime_billing_cycle(uint16_t tick) {
+void daytime_cycle(uint16_t tick) {
     /* Latch tariff A only */
     uint8_t frame[5] = { 0xA5, 0x27, 0x01, (uint8_t)tick, (uint8_t)(tick >> 8) };
     rbamp_bus_general_call_write(bus_h, frame, 5);
@@ -1376,7 +1370,7 @@ void daytime_billing_cycle(uint16_t tick) {
     /* read the 5 modules of tariff A */
 }
 
-void nighttime_billing_cycle(uint16_t tick) {
+void nighttime_cycle(uint16_t tick) {
     /* Latch tariff B only */
     uint8_t frame[5] = { 0xA5, 0x27, 0x02, (uint8_t)tick, (uint8_t)(tick >> 8) };
     rbamp_bus_general_call_write(bus_h, frame, 5);
@@ -1392,6 +1386,74 @@ void all_modules_snapshot(uint16_t tick) {
 ```
 
 **Benefits**: one cycle per tariff = clean separation of metering intervals. Without groups you would have to maintain parallel sequential latch loops with conflict resolution.
+
+---
+
+## Scenario 18 — STD module: reactive power, THD and master-timed energy
+
+**Goal:** read the quantities that only an STD module measures — reactive
+and apparent power, THD, displacement power factor — and account energy
+over a period of your own. The same `rbamp_*` API serves both module
+lines; `rbamp_begin()` detects the line. On a BASIC module the example
+prints a note and falls back to the `quick_read` behaviour — nothing
+fails, the STD calls simply report "not supported".
+
+**Source:** [`examples/std_meter/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/std_meter/)
+
+```c
+rbamp_new(bus, 0x50, &dev);
+rbamp_begin(dev);                                   /* detects BASIC / STD */
+const bool std = (rbamp_line(dev) == RBAMP_LINE_STD);
+
+if (std) {
+    rbamp_std_info_t info;
+    rbamp_std_info(dev, &info);
+
+    /* THD and displacement PF are off by default (RAM-only setting;
+     * reverts at a module reset). */
+    rbamp_std_set_harmonics(dev, true);
+
+    /* Period energy depends on what the module offers. */
+    if (info.period_source == RBAMP_STD_PERIOD_LATCH) {
+        /* Latch banks: keep bank 0 (the library's) armed, add our own. */
+        rbamp_std_arm_banks(dev, (1u << 0) | (1u << 1));
+        rbamp_std_latch(dev, 1);                    /* primer: the period starts now */
+    }                                               /* COUNTERS: nothing to arm */
+}
+
+while (1) {
+    rbamp_std_voltage_t v;
+    rbamp_std_read_voltage(dev, 0, &v);             /* U, THD, phase angle */
+    for (uint8_t ch = 0; ch < rbamp_channels(dev); ++ch) {
+        rbamp_std_channel_t c;
+        rbamp_std_read_channel(dev, ch, &c);        /* I, P, Q, S, PF, PF1, THD in one burst */
+    }
+
+    rbamp_std_health_t h;                           /* the frame counter must keep growing */
+    rbamp_std_read_health(dev, &h);
+
+    /* Every PERIOD_MS: */
+    /*  - LATCH module:    rbamp_std_latch(dev, 1); wait >= 300 ms;
+     *                     rbamp_std_read_latch(dev, 1, &lt);
+     *                     rbamp_std_latch_wh(&lt, dt_ms, RBAMP_STD_TOTAL, &wh_in, &wh_out);
+     *  - COUNTERS module: rbamp_read_period_snapshot(dev, &ps, 0, false);
+     *                     ps.wh_net / ps.avg_p_total / ps.module_restarted */
+    vTaskDelay(pdMS_TO_TICKS(1000));
+}
+```
+
+**Notes:**
+- `dt_ms` is the **master** wall-clock between two latches of the bank —
+  the module has no clock of its own for the period.
+- On a counter module there is no latch and nothing to arm: the library's
+  period snapshot reads the persisted counters and reports the difference;
+  `module_restarted` flags a reboot inside the period (the difference is
+  still valid).
+- The latch-bank mask is RAM on the module. If a module reset clears it,
+  `rbamp_std_read_latch()` re-arms the bank and returns
+  `ESP_ERR_INVALID_STATE` for that one period — drop it and restart your
+  dt anchor.
+- Full API: [09 · API Reference](09_api_reference.md), chapter "STD line".
 
 ---
 
@@ -1413,9 +1475,10 @@ void all_modules_snapshot(uint16_t tick) {
 | 12 | ~70 | dedicated | yes | no | no | SPIFFS |
 | 13 | ~80 | dedicated | yes | no | yes | RTC memory + MQTT |
 | 14 | ~60 | dedicated I3 | no (RT) | no | no | RAM |
-| 15 | ~80 | shared 5×UI1 | yes (billing) | no | no | RAM |
+| 15 | ~80 | shared 5×UI1 | yes | no | no | RAM |
 | 16 | ~100 | shared 12 modules | yes (GC sync) | no | no | RAM |
 | 17 | ~60 | shared 10 modules multi-tenant | yes (GC groups) | no | no | RAM |
+| 18 | ~110 | dedicated (STD module) | yes (latch bank or counters) | no | no | RAM (life-time counters live on the module) |
 
 ## What's next
 

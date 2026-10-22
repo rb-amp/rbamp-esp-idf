@@ -10,10 +10,9 @@ version: "1.7.2"
 license: "MIT"
 url: "https://github.com/rb-amp/rbamp-esp-idf"
 repository: "https://github.com/rb-amp/rbamp-esp-idf.git"
-documentation: "https://rbamp.com/docs?utm_source=espressif-registry&utm_medium=referral&utm_campaign=ui-series-launch"
+documentation: "https://rbamp.com/docs"
 issues: "https://github.com/rb-amp/rbamp-esp-idf/issues"
 
-# Tags help discovery on the registry.
 tags:
   - rbamp
   - i2c
@@ -36,10 +35,7 @@ dependencies:
 
 # Supported chip targets.
 #
-# Note: esp32p4 is omitted — P4 chip support landed in IDF v5.3+ and our
-# minimum (`dependencies.idf: >=5.2`) would let a v5.2 user attempt a P4
-# build that fails with "target esp32p4 not in idf". Re-enable once the
-# minimum IDF version is bumped to >=5.3.
+# Note: esp32p4 is not a supported target (the minimum IDF version is 5.2).
 targets:
   - esp32
   - esp32s2

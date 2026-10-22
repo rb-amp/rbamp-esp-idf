@@ -15,27 +15,26 @@ and phase quantities, a channel count that follows the module (1, 2, 3, 5 or
 7), the sensor-model registry with clip limits, one-transaction window reads,
 resume after a master outage, and the SCT-013 rating correction for current-
 line modules whose firmware keeps the 30 A calibration (firmware reporting
-capability bit 12 corrects itself). Hardware validation of this line was done
+capability flag corrects itself). Hardware validation of this line was done
 on a host running ESP-IDF 5.4.1.
 
 ### Added
+- SCT-013-060 and -100 are accepted (they were refused client-side as reserved); sensor-model clip limits updated to measured values.
 - SCT-013 rating switch: a current-sensor
   module of class 1 is calibrated with the 30 A sensor, and firmware up to
   1.4.19 keeps that calibration after the user binds another model. The
   library now reads the gain the module applies at `rbamp_begin()`, after a
   model write and after every detected module restart, and scales current,
   peak current, real power, period average power, the energy it integrates,
-  the digest and the event thresholds by preset(model) x c(model) / preset(030)
-  (c = 0.962 for the 100 A model, 1 otherwise). Voltage and power factor are
+  the digest and the event thresholds by the ratio of the chosen model's factory preset to the 030 preset. Voltage and power factor are
   not scaled. `rbamp_sct_correction()` reports the outcome per channel
   (`rbamp_sct_correction_t`: status, model, scale, applied gain) and
   `rbamp_sct_refresh()` re-evaluates on demand. A gain still equal to the raw
   preset (model switched in this boot without a restart) triggers one
-  CMD_RESET; a gain more than 5 % off the 030 preset, an unknown model, or a
+  CMD_RESET; an unexpected applied gain, an unknown model, or a
   raw preset that survives the reset leave the readings unscaled with a
-  warning. A module reporting CAPABILITY bit 12 (CAP_SCT_RATING_SELF,
-  firmware 1.4.20 and later) corrects itself and gets scale 1 — detected by
-  the capability bit, never by VERSION.
+  warning. A module with firmware 1.4.20 or later corrects itself and gets scale 1 — detected by
+  a capability flag, never by VERSION.
   `CONFIG_RBAMP_SCT_RATING_CORRECTION` (default on) turns the mechanism off.
 - `rbamp_begin_resume()` — `rbamp_begin()` without the primer latch. A BASIC
   module keeps averaging until the next latch, so after a master reboot or
@@ -78,8 +77,7 @@ on a host running ESP-IDF 5.4.1.
 ### Changed
 - `rbamp_set_ct_model()`, `rbamp_set_ct_model_ch()` and
   `rbamp_configure_channels()` on a class-1 module without
-  CAP_SCT_RATING_SELF (firmware up to 1.4.19) end with a module restart (CMD_RESET, the same UID verified, about half a
-  second): the only way the module returns to its calibrated gain after a
+  the self-correction capability (firmware up to 1.4.19) end with a module restart (CMD_RESET, the same UID verified, about a second): the only way the module returns to its calibrated gain after a
   model write. The library re-applies what it owns (primer latch, digest mask
   on next use); the period accumulators restart as after any module reset.
 - The transport no longer calls `i2c_master_bus_reset()` on its own before
@@ -102,7 +100,7 @@ on a host running ESP-IDF 5.4.1.
   `rbamp_configure_channels()` decides the whole request before its first
   write, so on such a module nothing is half-applied.
 - `latch_ms` documentation: diagnostic only, may read short under load; the
-  billing window is `master_dt_ms` or `module_window_ms`.
+  energy-integration window is `master_dt_ms` or `module_window_ms`.
 - Documentation and the Kconfig help now state the module's publish window
   as 100 ms across the family (older images: 200 ms). The 300 ms settle the
   library applies after an STD latch is described as the safe upper bound it
@@ -144,10 +142,10 @@ on a host running ESP-IDF 5.4.1.
 
 ## 1.7.0 — µWh energy, starting current, phase angles and sequence (2026-10-17)
 
-Support for module firmware 0x0001007A / 0x0001007B. Every addition is
+Support for module image version 0x0001007A / 0x0001007B. Every addition is
 gated on what the module reports; older modules behave exactly as before.
 
-Validated on STD-UI1 and STD-U3I3 modules with firmware 0x0001007B on a host
+Validated on STD-UI1 and STD modules with module image version 0x0001007B on a host
 application: starting-current get/set and read-back, phase angles and phase
 sequence on a three-phase module, fine energy flags, energy delta across
 module restarts.
@@ -157,8 +155,7 @@ module restarts.
   `act_import_uwh`, `act_export_uwh`, `act_net_uwh`, `rea_import_uvarh`,
   `rea_export_uvarh`, `ch_import_uwh[]`, `ch_export_uwh[]`, plus `fine` /
   `fine_reactive`. The fields are filled on every module: from the module's
-  own µ counters when it publishes them (capability bit 15, firmware
-  0x0001007A; reactive from 0x0001007B), otherwise scaled from the coarse
+  own µ counters when it publishes them (capability flag, module image version 0x0001007A; reactive from 0x0001007B), otherwise scaled from the coarse
   counters with `fine` false — callers can use the µ fields unconditionally.
   Read as one 40-byte transaction plus one per-channel transaction (coherent
   snapshot). `rbamp_std_energy_delta` applies the same rules to them
@@ -171,19 +168,19 @@ module restarts.
   confirmed; `rbamp_save_user_config` persists it). Below this channel
   current the module counts no energy; readings are not affected; default
   400 µA. Also in `rbamp_std_config_t` (`start_ua`, `start_ua_supported`).
-  `ESP_ERR_NOT_SUPPORTED` without bus traffic before firmware 0x0001007B.
+  `ESP_ERR_NOT_SUPPORTED` without bus traffic before module image version 0x0001007B.
 - **Voltage phase angle**: `rbamp_std_voltage_t.angle_deg` / `angle_valid`
-  (degrees against voltage input 0; firmware 0x0001007A+, three-phase
+  (degrees against voltage input 0; module image version 0x0001007A+, three-phase
   modules; otherwise `angle_valid` false). Same single-burst read as before.
 - **Phase sequence**: `rbamp_std_read_phase_seq` →
   `rbamp_std_phase_seq_t` (`RBAMP_STD_PHASE_SEQ_NA` / `FORWARD` / `REVERSE`
   / `ABNORMAL`); `ESP_ERR_NOT_SUPPORTED` without bus traffic before
-  firmware 0x0001007A.
+  module image version 0x0001007A.
 - Host unit test of the pure decode helpers: `test/host/run.sh` (gcc, no
   ESP-IDF). The energy delta rules now live in `src/rbamp_std_decode.c`.
 
 ### Changed
-- `rbamp_is_provisioned` (STD line) documents the firmware 0x0001007A
+- `rbamp_is_provisioned` (STD line) documents the module image version 0x0001007A
   calibration marker: a unit calibrated under older firmware reads false
   after the update until one `rbamp_save_gains`.
 
@@ -230,8 +227,7 @@ behaviour of existing calls on the STD line is tightened.
   populated by the module — use `rbamp_std_read_energy`).
 - `rbamp_read_frequency` (STD): 0 from the module means no mains →
   `ESP_ERR_INVALID_RESPONSE` / NaN (`rbamp_read_all` flags it implausible).
-- `rbamp_is_provisioned` (STD): documented as reliable from module firmware
-  0x00010079 (older images also report calibration valid on default gains).
+- `rbamp_is_provisioned` (STD): documented as reliable from module image version 0x00010079 (older images also report calibration valid on default gains).
 - Generated STD register header refreshed (status bit 3 is reserved).
 
 ## 1.6.0 — STD module line, data-ready line, events (2026-10-11)
@@ -260,7 +256,7 @@ behaviour of existing calls on the STD line is tightened.
   the last one only).
 - **Health**: `rbamp_std_read_health` extended with status bits, lifetime and
   calibration sources, frame counters, uptime, and reset cause + boot count
-  (module firmware 0x00010076 and newer, `RBAMP_STD_RST_*`).
+  (module image version 0x00010076 and newer, `RBAMP_STD_RST_*`).
 - **Commands and service**: `rbamp_std_command`, `rbamp_std_wait_idle`,
   `rbamp_std_locate`, `rbamp_std_read_board_id`, `rbamp_std_ota_board_ok`
   (board check before an OTA stream), `rbamp_std_set_address_by_uid`.
@@ -275,7 +271,7 @@ behaviour of existing calls on the STD line is tightened.
   One open-drain line may be shared by several modules; the library verifies
   the publish sequence, counts missed windows, reports latency and detects a
   held-low alarm. Polling fallback via `CONFIG_RBAMP_DRDY_POLL_MS`.
-  STD modules need module firmware 0x00010075 or newer.
+  STD modules need module image version 0x00010075 or newer.
 - **Events on both lines**: `rbamp_read_event_mask`, `rbamp_set_event_mask`,
   `rbamp_set_event_thresholds`, `rbamp_begin_event_flags`,
   `RBAMP_EVENT_NVM_FAULT`; `rbamp_read_event_flags` / `rbamp_clear_event_flags`

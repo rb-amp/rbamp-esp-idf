@@ -146,7 +146,7 @@ struct rbamp_obj_t {
 
     /* Energy dt anchor — MASTER wall-clock (esp_timer) of the previous
      * consumed period read. The chip's REG_V03_PERIOD_LATCH_MS (0xEC) is
-     * diagnostic only (may read short under load), so billing energy
+     * diagnostic only (may read short under load), so energy totals
      * integrates over the master's own clock between successive period
      * reads — or, for the first read after rbamp_begin_resume, over the
      * module's commit-counted window (0xBE). */
@@ -2330,7 +2330,7 @@ esp_err_t rbamp_read_period_snapshot(rbamp_handle_t dev,
 
     /* 2. Capture the master-clock reference for this read's energy window and
      *    compute dt against the previous consumed read. The master's esp_timer
-     *    is the billing window; the chip's 0xEC is diagnostic only. */
+     *    is the energy window; the chip's 0xEC is diagnostic only. */
     const int64_t now_us = esp_timer_get_time();
     uint32_t dt_ms = 0;
     if (dev->have_last_latch && now_us > dev->last_latch_us) {

@@ -2,13 +2,13 @@
 
 This chapter describes the physical wiring of the **rbAmp** module to
 ESP32-family boards: LV-side pinout, power requirements, I²C voltage-level
-compatibility, bus length, and the standard default pins for all 8 ESP32
-chips (esp32, esp32s2, esp32s3, esp32c2, esp32c3, esp32c6, esp32h2,
-esp32p4).
+compatibility, bus length, and the standard default pins for the 7 supported ESP32
+chips (esp32, esp32s2, esp32s3, esp32c2, esp32c3, esp32c6, esp32h2).
 
-The module's mains side is already routed inside the enclosure and
-galvanically isolated — the user works only with the LV side (power +
-I²C + optional `DRDY`).
+The module's mains side is galvanically isolated from the LV side. The
+LV side (power + I²C + optional `DRDY`) is described first; the mains
+and CT connection is in [Mains and CT connection](#mains-and-ct-connection)
+below.
 
 ## LV-side pinout
 
@@ -21,7 +21,7 @@ signal lines. All LV pins are fully galvanically isolated from mains.
 | `GND` | Ground | Shared with the master — **mandatory** |
 | `SDA` | I²C SDA | I²C data |
 | `SCL` | I²C SCL | I²C clock |
-| `DRDY` | Data-ready (optional) | Open-drain, LOW pulse ~10 µs every ~200 ms |
+| `DRDY` | Data-ready (optional) | Open-drain, LOW pulse ~10 µs every ~100 ms |
 
 ## Power
 
@@ -62,11 +62,32 @@ continues.
 Inside the module there is a galvanic isolation barrier between the mains
 side (CT clamp, voltage divider) and the LV side (I²C). Consequences:
 
-- The module's `GND` is **not connected** to mains line or neutral.
-- Connecting the LV side to the ESP32 is safe — there is no risk of a
-  short circuit through ground.
+- The module's `GND` is not connected to mains line or neutral.
+- The LV side is isolated from the mains side by the barrier, so the LV
+  pins connect to the ESP32 without a mains reference. This does not
+  replace the mains-wiring precautions in the next section.
 
 > ⚠ Do not open the module enclosure — this voids the factory calibration.
+
+## Mains and CT connection
+
+> ⚠ **Mains voltage can kill.** Disconnect and lock out the circuit before
+> connecting the L/N terminals or fitting the clamp; have a qualified person
+> do mains wiring and any work inside a panel. Clamp **ONE conductor only
+> (L)** — never the whole cable. Fuse the L tap per local rules.
+
+- **Voltage (UI variants only):** the module measures voltage from the L/N
+  connection on its mains side: the PCB exposes `L` (line) and `N` (neutral)
+  terminals, and polarity matters for the sign of power. I-variants (`I1`/`I2`/`I3`) have no voltage input.
+- **Current:** the SCT-013 clamp plugs into the module's 3.5 mm CT jack (keyed for correct polarity; each jack
+  on the PCB is labelled with its channel, `I0`, `I1`, …) and closes around the **line
+  conductor (L)**. The arrow on the clamp body points **in the direction of
+  current toward the load**. A reversed clamp gives a negative `P` on a
+  consuming load.
+- Clamp the line conductor, not neutral and not both conductors together.
+- Do not open the module enclosure — this voids the factory calibration. The
+  pull-up bridges mentioned below are on the board's bottom side; follow the
+  module's instructions for reaching them.
 
 ## Built-in pull-up resistors — on-board
 
@@ -79,8 +100,9 @@ The ESP-IDF `i2c_master_bus_config_t` also lets you enable the
 They are weak (~50 kΩ on the ESP32) and work in parallel with the module's
 external 4.7 kΩ — the combination gives an effective ~4.4 kΩ, which is
 acceptable. For production deployments, prefer relying on the module's
-external 4.7 kΩ; the internal GPIO pull-ups are for bench tests without a
-module on hand (for example, when you are just checking a bus scan).
+external 4.7 kΩ; the internal GPIO pull-ups are optional with the module's
+own pull-ups and are mainly for bench tests without a module on hand (for
+example, when you are just checking a bus scan).
 
 ### When to disable the built-in pull-ups
 
@@ -109,8 +131,8 @@ with a sharp blade:
 | 2 | Leave on one, cut on the other |
 | 3+ | Cut on all modules, fit a single external 2.2…4.7 kΩ pair near the ESP32 |
 
-> **If in doubt**: measure the resistance between SDA and VCC with the
-> devices powered off. It should be in the **1.5..4.7 kΩ** range. Lower —
+> **If in doubt**: measure the resistance between SDA and the 3V3 line with
+> all devices unpowered. It should be in the **1.5..4.7 kΩ** range. Lower —
 > too many active pull-ups in parallel.
 
 ## I²C bus parameters
@@ -139,6 +161,10 @@ I²C is a short bus (~30 cm by default). Verified topologies for rbAmp:
 | Twisted pair + I²C buffer (PCA9515 / TCA9617) | up to 3 m | 100 kHz |
 | Differential bus (PCA9615 / LTC4332) | up to 100 m | 100 kHz |
 
+> The lengths above were verified at 100 kHz. The component's default
+> bus speed is 50 kHz (see "ESP32 baseline NACK pattern" below), which is
+> more tolerant of longer cables; keep 50 kHz and do not exceed these lengths.
+
 > For lengths beyond 0.3 m a **twisted pair is mandatory**: SDA and SCL
 > must be in **different** pairs, each with its own ground. SDA and SCL
 > in the same pair create cross capacitive coupling that distorts the
@@ -156,7 +182,7 @@ into trivial ones).
 
 | Scenario | Configuration | Module count |
 |---|---|---|
-| **80% canonical**: home main + submeters | 1× UI1 (main, mains-energy) + 3-6× UI1/I1 (loads) | 4-7 |
+| **80% canonical**: home main + submeters | 1× UI1 (main, mains-energy) + 3-6× UI1 (loads; power and Wh need a UI variant) | 4-7 |
 | Subpanel with current breakdown | 1× UI1 (main) + 1-2× I2/I3 (per-circuit current) | 3-5 |
 | Industrial sub-metering | 1× UI1 (main) + N× I2/I3 (per machine, current breakdown) | up to ~16 |
 
@@ -200,19 +226,19 @@ On a 50 kHz bus a single register-read transaction ≈ 200-400 µs (depends on t
 
 | Configuration | Bus per cycle | At 50 kHz | Max polling rate |
 |---|---|---|---|
-| 1× UI1, RT block | ~5 ms | < 5 ms | 100+ Hz (but the module updates at 5 Hz) |
-| 1× I3, RT block + period | ~25 ms | ~25 ms | 5 Hz |
-| 5× UI1, RT block | ~25 ms | ~25 ms | 5 Hz |
-| 16× I3, RT + period | ~400 ms | **400 ms > 200 ms** | **cannot keep up with the module (5 Hz)** |
+| 1× UI1, RT block | ~5 ms | < 5 ms | 100+ Hz (but the module updates at 10 Hz) |
+| 1× I3, RT block + period | ~25 ms | ~25 ms | up to 10 Hz |
+| 5× UI1, RT block | ~25 ms | ~25 ms | up to 10 Hz |
+| 16× I3, RT + period | ~400 ms | **400 ms > 100 ms** | **cannot keep up with the module (10 Hz); ~2 Hz at best** |
 
-> The numbers above are **estimates** (200-400 µs/transaction depends on the ESP32 driver + the specific MCU). Exact values will be confirmed by a bench test (the C/E functional-test block).
+> The numbers above are estimates and depend on the host MCU and driver.
 
-**Rule**: at 50 kHz the comfortable limits are **8-10× I3** or **15-16× UI1** at 5 Hz polling. Beyond that:
+**Rule**: at 50 kHz the comfortable limits are **8-10× I3** or **15-16× UI1** at 5 Hz polling (every second module window), and roughly half of that at the full 10 Hz. Beyond that:
 - Lower the polling rate (1 Hz = 10× headroom).
-- Move to 100 kHz with retry (allow for a ~20% NACK rate).
+- Move to 100 kHz with retry (expect frequent NACKs and rely on retry).
 - Use the `DRDY` pin for async — do not poll modules that are not ready yet.
 
-#### Period sync — synchronizing periods for billing-grade metering
+#### Period sync — synchronizing periods for tight synchronization
 
 For tariff metering all modules must latch the **same** time interval. Two strategies:
 
@@ -234,7 +260,7 @@ for (int i = 0; i < n; i++) {
 }
 ```
 
-Skew between modules: 16 modules × ~1 ms/latch = ~16 ms relative to a 60-second period → **0.027%**. Negligible for billing.
+Skew between modules: 16 modules × ~1 ms/latch = ~16 ms relative to a 60-second period → **0.027%**. Negligible.
 
 **Strategy 2 — General-Call broadcast latch** (requires enabling):
 
@@ -253,7 +279,7 @@ Skew = 0 (atomic). Pre-config:
 
 When to use which:
 - **< 8 modules**: strategy 1 (simpler, no enabling required).
-- **≥ 8 modules** or **billing-grade synchronicity**: strategy 2.
+- **≥ 8 modules** or **tight synchronization**: strategy 2.
 
 #### GC group filtering — a multi-tenant bus
 
@@ -279,7 +305,7 @@ GC frame [A5 27 00 tl th] → all 10 latch (all-call)
 |---|---|---|
 | `i2c bus scan` shows several modules at the same address after a field add | The new module on `0x50` conflicts with an already-addressed one | Re-flash the new module's address **separately** before adding it to the bus |
 | One module starts NACK'ing more often than the others | Cable fault / VCC drop on that module | Check VCC under load + logic levels |
-| One module's Wh consistently diverges | Module clock drift on the LSI | See clock-drift calibration (E.6 hw test) |
+| One module's Wh consistently diverges | The module's own timer differs from the master clock | Integrate energy against the master clock (`master_dt_ms`) |
 | After a GC frame one module does not latch | `FLEET_CONFIG.bit0 = 0` or group mismatch | Check `REG_FLEET_CONFIG` and `REG_GROUP_ID` |
 
 #### Bus design notes
@@ -287,11 +313,11 @@ GC frame [A5 27 00 tl th] → all 10 latch (all-call)
 - **Clock stretching**: the current firmware minimizes stretch (the `__disable_irq` window in LatchPeriod is short, ~µs). The latch itself does not pull SCL significantly. For the Raspberry Pi BCM283x (a known clock-stretching hw bug): apply the standard caution — 50 kHz + retry are already recommended.
 - **Bus length with >4 modules**: even on a twisted pair the effective capacitance grows linearly with the count. Consider an I²C buffer (PCA9515) at ≥ 8 modules + a length > 1 m.
 
-Detailed multi-module scenarios are in [06 · Examples](06_examples.md), the “Sub-metering shared bus” and “GC broadcast billing-sync” scenarios.
+Detailed multi-module scenarios are in [06 · Examples](06_examples.md), the “Sub-metering shared bus” and “GC broadcast latch” scenarios.
 
 ## Pinout on the ESP32 family
 
-All 8 ESP32 chips are supported (per `idf_component.yml`). Below are the
+The 7 chips listed at the top of this chapter are supported (per `idf_component.yml`). Below are the
 recommended default pins for I²C; for production deployments, choose the
 GPIO based on your board's specific layout.
 
@@ -312,7 +338,7 @@ const i2c_master_bus_config_t bus_cfg = {
 |---|---|
 | SDA | GPIO21 |
 | SCL | GPIO22 |
-| DRDY | any (for example, GPIO15 — supports interrupts) |
+| DRDY | any free GPIO that is not a strapping pin (on the classic ESP32 avoid GPIO0/2/12/15) |
 
 ### ESP32-S2
 
@@ -358,18 +384,16 @@ For the other chips — check the target-specific ESP-IDF documentation
 (`docs.espressif.com → ESP-IDF v5.2+ → your chip → API reference →
 peripherals → I2C`).
 
-### ESP32-P4 — not in targets yet
+### ESP32-P4 — not a supported target
 
-The ESP32-P4 has been temporarily removed from the list of supported
-chips: P4 support arrives in ESP-IDF v5.3+, while the component's minimum
-is v5.2. To avoid handing a v5.2 user a build that fails with “target
-esp32p4 not in idf”, the P4 will be brought back as soon as the IDF
-minimum is raised to v5.3.
+The ESP32-P4 is not in the supported target list: P4 support needs
+ESP-IDF v5.3+, while the component's minimum is v5.2 (a v5.2 build for
+`esp32p4` would fail with “target esp32p4 not in idf”).
 
 ## ESP32 baseline NACK pattern — 50 kHz bus speed
 
-With the ESP-IDF v5 `i2c_master` driver, rbAmp exhibits a **~20% NACK
-rate at 100 kHz** and **< 5% at 50 kHz** (a characteristic of the driver
+With the ESP-IDF v5 `i2c_master` driver, rbAmp exhibits **frequent NACKs
+at 100 kHz**, far fewer at 50 kHz (a characteristic of the driver
 on the ESP32 side, not the slave). The component covers this in two layers:
 
 1. **A default bus speed of 50 kHz** via the Kconfig
@@ -393,7 +417,7 @@ For more on diagnosing bus-level problems — see
 ## DATA_READY (DRDY)
 
 An optional pin for polling optimization. If the application polls the
-module no more often than once every 200 ms — `DRDY` can be left
+module no more often than once every 100 ms — `DRDY` can be left
 unconnected.
 
 ### Electrical parameters
@@ -404,7 +428,7 @@ unconnected.
   recommended)
 - **Ready pulse**: LOW for ~10 µs after the RT registers have been updated
   with fresh data
-- **Pulse rate**: ~5 Hz (one pulse per ~200 ms RT window)
+- **Pulse rate**: ~10 Hz (one pulse per ~100 ms RT window)
 
 ### Semantics
 
@@ -486,7 +510,7 @@ void app_main(void) {
 }
 ```
 
-`DRDY` is **optional** — polling at any rate ≤ 5 Hz works without it too.
+`DRDY` is **optional** — polling at any rate ≤ 10 Hz works without it too.
 The component does not depend on `DRDY` in any of its paths.
 
 ## Links

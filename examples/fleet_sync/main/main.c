@@ -30,7 +30,7 @@ static const char *TAG = "fleet_sync";
 #define SDA_GPIO    GPIO_NUM_21
 #define SCL_GPIO    GPIO_NUM_22
 #define GC_GROUP    0x00         /* all-call */
-#define WINDOW_MS   60000        /* 60 s billing window */
+#define WINDOW_MS   60000        /* 60 s energy window */
 
 void app_main(void)
 {

@@ -12,17 +12,15 @@ polarity) is covered in [04_hardware.md](04_hardware.md). This chapter is about
 
 ## Sensor class
 
-rbAmp modules work with CT clamps from the **SCT-013** family. The
-sensor class is determined by the module's hardware revision and is set
-at the factory — the user reports their choice via `rbamp_set_sensor_class()`
-before picking a specific CT clamp model.
+rbAmp modules work with CT clamps from the **SCT-013** family. You must
+tell the module the sensor class once, with
+`rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013)`, before picking a specific
+CT clamp model with `rbamp_set_ct_model()`.
 
 ## Choosing the SCT-013 model
 
 The SCT-013 family has seven models that differ in maximum primary-circuit
-current. Five codes have been characterized on the current bench
-(`{1, 2, 3, 4, 6}`); codes `5` and `7` are present in the API and SPEC but
-are not yet validated.
+current. All seven codes `{1, 2, 3, 4, 5, 6, 7}` are supported.
 
 | `code` | Model | Current range | Status | Typical use |
 |:---:|---|---|:---:|---|
@@ -30,14 +28,13 @@ are not yet validated.
 | **2** | SCT-013-010 | 0…10 A | ✅ characterized | A single mid-power appliance — refrigerator, washing machine, air conditioner up to 2 kW |
 | **3** | SCT-013-030 | 0…30 A | ✅ characterized | Service entry of a mid-sized household — up to ~7 kW |
 | **4** | SCT-013-050 | 0…50 A | ✅ characterized | Large service entry — electric heating, EV charger, a house with peak loads |
-| **5** | SCT-013-100 | 0…100 A | ⏳ uncharacterized | (Main service entry of a house or small office; code reserved, but requires bench validation.) |
+| **5** | SCT-013-100 | 0…100 A | ✅ characterized | Main service entry of a house or small office |
 | **6** | SCT-013-020 | 0…20 A | ✅ characterized | Medium service entry — 3–4 kW appliances, heavy household equipment |
-| **7** | SCT-013-060 | 0…60 A | ⏳ uncharacterized | (Industrial sub-meter; code reserved, but requires bench validation.) |
+| **7** | SCT-013-060 | 0…60 A | ✅ characterized | Industrial sub-meter |
 
-> **Production-safe codes — `{1, 2, 3, 4, 6}`**. Use only the
-> characterized codes in production. Calling `rbamp_set_ct_model_ch`
-> with codes `5` or `7` on the current hardware returns `ESP_ERR_INVALID_ARG`
-> + `REG_ERROR = 0xFE (ERR_PARAM)`. See [09 · API reference](09_api_reference.md),
+> **Accepted codes — `{1, 2, 3, 4, 5, 6, 7}`**. A code outside this set
+> (for example `0` or `8`) passed to `rbamp_set_ct_model_ch` returns
+> `ESP_ERR_INVALID_ARG` + `REG_ERROR = 0xFE (ERR_PARAM)`. See [09 · API reference](09_api_reference.md),
 > section "Error model v1.3", for details on exactly how this error is
 > returned by the component.
 
@@ -92,13 +89,13 @@ void setup_sensor(rbamp_handle_t dev) {
 
     /* Step 2: select the model within the family.
      * 1 = SCT-013-005, 2 = SCT-013-010, 3 = SCT-013-030,
-     * 4 = SCT-013-050, 6 = SCT-013-020. */
+     * 4 = SCT-013-050, 5 = SCT-013-100, 6 = SCT-013-020, 7 = SCT-013-060. */
     err = rbamp_set_ct_model(dev, 3);   /* e.g. SCT-013-030 */
     if (err != ESP_OK) {
         /* Possible causes:
          *   ESP_ERR_INVALID_STATE — rbamp_set_sensor_class() was not called
          *                            before rbamp_set_ct_model()
-         *   ESP_ERR_INVALID_ARG   — code not in {1,2,3,4,6}
+         *   ESP_ERR_INVALID_ARG   — code not in {1,2,3,4,5,6,7}
          *   ESP_FAIL              — communication error (NACK after retry)
          */
         ESP_LOGE("app", "set_ct_model: %s", rbamp_err_to_str(err));
@@ -138,6 +135,7 @@ never repeated.
 A simple sanity check after `rbamp_set_ct_model()`:
 
 ```c
+#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -301,11 +299,8 @@ float read_combined_current(rbamp_handle_t dev) {
      * accuracy at small currents. Switch to the large one as it
      * approaches the overload point.
      *
-     * The 4.5 A threshold for the SCT-013-005 is PROVISIONAL; the exact
-     * value will be determined by the factory bench-calibration program
-     * (see the bench-validation note below).
-     * Behavior near the threshold is a matter for measurement, not
-     * estimation. */
+     * The 4.5 A threshold for the SCT-013-005 is an example value;
+     * figures for low-current dual-CT use are not published. */
     if (err_low == ESP_OK && i_low < 4.5f) {
         return i_low;
     }
@@ -313,18 +308,14 @@ float read_combined_current(rbamp_handle_t dev) {
 }
 ```
 
-> 📷 **Installation diagram pending.** Two clamps on one wire are
-> physically possible on most household-gauge cables, but they require a
-> little space in the panel. A detailed diagram — including the arrow
-> orientation of both clamps and the allowable distances between them —
-> will appear here as it is prepared.
+> Two clamps on one wire are physically possible on most
+> household-gauge cables, but they require a little space in the panel.
 
-> ⚙ **Bench validation.** The exact figures for the dual-CT template
-> (behavior near the threshold, temperature drift, divergence of the two
-> clamps in the overlapping range) are established by the factory
-> bench-calibration program (bench validation). Until it is complete, treat
-> dual-CT as a pilot pattern; for critical applications a single clamp
-> sized to the upper load range is preferable.
+> ⚙ **Dual-CT figures.** Figures for low-current dual-CT use (behavior
+> near the threshold, divergence of the two clamps in the overlapping
+> range) are not published. Treat dual-CT as a pilot pattern; for
+> critical applications a single clamp sized to the upper load range is
+> preferable.
 
 ## Multi-channel modules — I2 and I3 (current-only)
 
@@ -412,21 +403,17 @@ Three strategies in order of increasing complexity:
 1. **Size the CT to the maximum, not "with margin".** The most common
    mistake is to put an SCT-013-100 (100 A) on a household outlet with a
    typical consumption of 0.5–10 A. The signal lies in the lower 1–10 %
-   of the ADC — where noise becomes comparable to the signal. For the
+   of the sensor's range — where noise becomes comparable to the signal. For the
    household scenario (16 A outlet) the SCT-013-030 is optimal; for
    connecting a single device (≤ 5 A) the SCT-013-005.
 2. **Dual-CT topology** (requires an I2/I3 SKU — two current channels on one module): a small clamp for the
    lower range + a large one for the upper, with the master selecting by
    threshold. See the section "Dual-CT topology" above — the pattern is a
-   pilot, the numbers are being refined by the factory bench-calibration
-   program.
-3. **Bench calibration of the noise floor** (factory-side): the factory
-   bench-calibration program characterizes the noise floor on the test
-   bench; the results are baked
-   into the firmware's calibration array. On the user side, nothing needs
-   to be done beyond `setSensorClass()` + `setCTModel()`. Until the
-   program is complete, concrete accuracy figures at low currents are not
-   published.
+   pilot; figures for low-current dual-CT use are not published.
+3. **Noise floor** (factory-side): the module's calibration already
+   accounts for it. On the user side, nothing needs
+   to be done beyond `setSensorClass()` + `setCTModel()`. Concrete
+   accuracy figures at low currents are not published.
 
 ## Production vs Factory mode (persistence reference)
 
@@ -449,7 +436,7 @@ In production mode, writes of the factory calibration (`CMD_SAVE_GAINS`,
 against accidentally erasing the factory coefficients. Deploying
 factory-mode is a manufacturer-side operation; end users don't need it.
 
-> **Read-back ≠ persistence** (HW-verified A.7). The production guard
+> **Read-back ≠ persistence** The production guard
 > accepts a write into RAM (a subsequent read returns the written value),
 > but the flash-save may be rejected. After a reboot the value **reverts**
 > to the pre-write state. **The only valid way to confirm persistence is

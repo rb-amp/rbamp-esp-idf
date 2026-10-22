@@ -206,7 +206,7 @@ and handles its own HA integration through the ESPHome native API:
 
 ```yaml
 external_components:
-  - source: github://rbamp/rbamp-esphome
+  - source: github://rb-amp/rbamp-esphome
     components: [rbamp]
     refresh: 0s
 
@@ -454,7 +454,7 @@ publish the state JSON once to MQTT and let each consumer subscribe to
 itself fans out to subscribers. Don't push from the ESP32 to N HTTP
 endpoints directly: that couples the device to specific consumers.
 
-For a very high-rate stream (5 Hz RT), run a sidecar Python script on
+For a very high-rate stream (10 Hz RT), run a sidecar Python script on
 the Pi alongside the broker — subscribe to the fast topic, decimate,
 and republish to the slow topics. The ESP32 I²C loop (a FreeRTOS task
 with `rbamp_read_*()` calls) should stay focused, free of HTTP
