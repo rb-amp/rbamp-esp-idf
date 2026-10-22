@@ -795,15 +795,19 @@ any `rbamp_set_*`.
 
 Possible causes:
 
-1. **Invalid model code** — the valid model codes are `{1, 2, 3, 4, 5, 6, 7}`
-   (see the table in [03 · Current sensor selection](03_sensor_selection.md)).
-   Values `0` and `8+` return `ESP_ERR_INVALID_ARG`.
+1. **Invalid model code for the class** — the valid codes depend on the sensor
+   class: `SCT013` accepts `{1, 2, 3, 4, 5, 6, 7}` (see the table in
+   [03 · Current sensor selection](03_sensor_selection.md)); `WIRED_CT`
+   accepts `1`–`10` and `12`. A code that is unknown for the class returns
+   `ESP_ERR_INVALID_ARG`.
 2. **Invalid channel index** in the per-channel form
    `rbamp_set_ct_model_ch(dev, channel, code)` — must be <
    `rbamp_channels(dev)`.
-3. **A reserved `rbamp_sensor_class_t` value** —
-   `RBAMP_SENSOR_WIRED_CT` or `RBAMP_SENSOR_BUILTIN_CT` are not yet
-   supported (not on the current SKU); use `RBAMP_SENSOR_SCT013`.
+3. **An invalid `rbamp_sensor_class_t` value** — a class above `3` returns
+   `ESP_ERR_INVALID_ARG`. Modules supplied calibrated together with their own
+   sensor (`RBAMP_SENSOR_WIRED_CT`, `RBAMP_SENSOR_BUILTIN_CT`) refuse a class
+   or model change (`ESP_ERR_INVALID_STATE`); for a clip-on SCT-013 clamp use
+   `RBAMP_SENSOR_SCT013`.
 4. **`dev == NULL` or `out == NULL`** — confirm that `rbamp_new()`
    succeeded (returned `ESP_OK`).
 
