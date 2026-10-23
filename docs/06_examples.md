@@ -128,7 +128,7 @@ static const char *TAG = "metering";
 
 static void configure_one(rbamp_handle_t dev) {
     if (!dev) return;
-    uint8_t n = rbamp_channel_count(dev);
+    uint8_t n = rbamp_channels(dev);
     if (n == 1) {                                /* UI1 mains */
         rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013);
         rbamp_set_ct_model(dev, /*example=*/3);   /* SCT-013-030 */
@@ -1266,11 +1266,9 @@ void sub_meter_task(void *arg) {
 **Preconfiguration (once per module)**:
 
 ```c
-/* Enable GC reception on each module */
-uint8_t fleet_config = 0x01;   /* bit0 = GC_ENABLE */
-rbamp_write_reg(dev, REG_FLEET_CONFIG, &fleet_config, 1);
-rbamp_save_user_config(dev);   /* CMD_SAVE_USER_CONFIG, production-OK */
-rbamp_reset(dev);              /* CMD_RESET, settle ~300 ms */
+/* Enable GC reception on each module: the call writes FLEET_CONFIG.bit0,
+   saves the configuration and restarts the module (~1 s) */
+rbamp_enable_gc(dev, true);
 ```
 
 **Runtime broadcast snapshot with witness**:
@@ -1278,45 +1276,35 @@ rbamp_reset(dev);              /* CMD_RESET, settle ~300 ms */
 ```c
 #define N_METERS 12
 
-esp_err_t synced_latch(rbamp_handle_t meters[], int n,
-                              uint16_t tick_counter) {
-    /* GC frame: A5 27 <group> <tick_lo> <tick_hi> on addr 0x00 */
-    uint8_t frame[5] = {
-        0xA5,                       /* GC_FRAME_MAGIC */
-        0x27,                       /* CMD_LATCH_PERIOD opcode */
-        0x00,                       /* group = 0x00 = all-call */
-        (uint8_t)(tick_counter & 0xFF),
-        (uint8_t)(tick_counter >> 8),
-    };
-
-    /* ESP-IDF: write to addr 0x00 (general-call) */
-    rbamp_handle_t bus_h = meters[0];   /* shared bus handle */
-    esp_err_t err = rbamp_bus_general_call_write(bus_h, frame, sizeof(frame));
+esp_err_t synced_snapshot(i2c_master_bus_handle_t bus,
+                          rbamp_handle_t meters[], int n,
+                          uint16_t tick_counter) {
+    /* All-call broadcast snapshot (group 0x00): the library builds the
+       General-Call frame and sends it to address 0x00 on the bus */
+    esp_err_t err = rbamp_broadcast_latch_group(bus, 0x00, tick_counter, 100);
     if (err != ESP_OK) return err;
 
     /* Settle: snapshot + 1 commit-cycle for witness refresh */
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    /* Witness check: each module should show PERIOD_VALID = 1 */
+    /* Witness check: each module echoes the tick of the last GC frame it accepted */
     int n_ok = 0;
     for (int i = 0; i < n; i++) {
-        uint8_t valid;
-        if (rbamp_read_reg(meters[i], REG_V03_PERIOD_VALID, &valid, 1) == ESP_OK
-            && valid == 1) {
+        uint16_t tick;
+        if (rbamp_read_gc_tick(meters[i], &tick) == ESP_OK && tick == tick_counter) {
             n_ok++;
         } else {
-            ESP_LOGW("gc-latch", "module %d did not take its snapshot (witness=0)", i);
+            ESP_LOGW("gc-snapshot", "module %d did not take its snapshot (witness mismatch)", i);
         }
     }
 
     if (n_ok < n) {
-        ESP_LOGW("gc-latch", "fallback to sequential snapshot for %d modules",
+        ESP_LOGW("gc-snapshot", "fallback to sequential snapshot for %d modules",
                  n - n_ok);
         /* Strategy 1 fallback on the remaining ones */
         for (int i = 0; i < n; i++) {
-            uint8_t valid;
-            rbamp_read_reg(meters[i], REG_V03_PERIOD_VALID, &valid, 1);
-            if (valid != 1) {
+            uint16_t tick;
+            if (rbamp_read_gc_tick(meters[i], &tick) != ESP_OK || tick != tick_counter) {
                 rbamp_latch_period(meters[i]);
             }
         }
@@ -1344,44 +1332,37 @@ esp_err_t synced_latch(rbamp_handle_t meters[], int n,
 ```c
 /* Tariff A — modules 0..4 → group = 1 */
 for (int i = 0; i < 5; i++) {
-    uint8_t group_id = 1;
-    rbamp_write_reg(meters[i], REG_GROUP_ID, &group_id, 1);
+    rbamp_set_group_id(meters[i], 1);
     rbamp_save_user_config(meters[i]);
-    rbamp_reset(meters[i]);
 }
 
 /* Tariff B — modules 5..9 → group = 2 */
 for (int i = 5; i < 10; i++) {
-    uint8_t group_id = 2;
-    rbamp_write_reg(meters[i], REG_GROUP_ID, &group_id, 1);
+    rbamp_set_group_id(meters[i], 2);
     rbamp_save_user_config(meters[i]);
-    rbamp_reset(meters[i]);
 }
 ```
 
 **Runtime — independent snapshot per tariff**:
 
 ```c
-void daytime_cycle(uint16_t tick) {
-    /* Snapshot tariff A only */
-    uint8_t frame[5] = { 0xA5, 0x27, 0x01, (uint8_t)tick, (uint8_t)(tick >> 8) };
-    rbamp_bus_general_call_write(bus_h, frame, 5);
+void daytime_cycle(i2c_master_bus_handle_t bus, uint16_t tick) {
+    /* Snapshot tariff A only (group 1) */
+    rbamp_broadcast_latch_group(bus, 1, tick, 100);
     vTaskDelay(pdMS_TO_TICKS(50));
     /* read the 5 modules of tariff A */
 }
 
-void nighttime_cycle(uint16_t tick) {
-    /* Snapshot tariff B only */
-    uint8_t frame[5] = { 0xA5, 0x27, 0x02, (uint8_t)tick, (uint8_t)(tick >> 8) };
-    rbamp_bus_general_call_write(bus_h, frame, 5);
+void nighttime_cycle(i2c_master_bus_handle_t bus, uint16_t tick) {
+    /* Snapshot tariff B only (group 2) */
+    rbamp_broadcast_latch_group(bus, 2, tick, 100);
     vTaskDelay(pdMS_TO_TICKS(50));
     /* read the 5 modules of tariff B */
 }
 
-void all_modules_snapshot(uint16_t tick) {
+void all_modules_snapshot(i2c_master_bus_handle_t bus, uint16_t tick) {
     /* group = 0x00 — all-call, all 10 take a snapshot */
-    uint8_t frame[5] = { 0xA5, 0x27, 0x00, (uint8_t)tick, (uint8_t)(tick >> 8) };
-    rbamp_bus_general_call_write(bus_h, frame, 5);
+    rbamp_broadcast_latch_group(bus, 0, tick, 100);
 }
 ```
 
