@@ -636,6 +636,7 @@ commit. The digest carries no CRC.
 
 ### Data-ready (DRDY)
 
+![Timing of the 100 ms real-time window, the data-ready pulse and the atomic block read.](images/rt-window-timing.png)
 Every module drives an optional open-drain `DRDY` output: idle HIGH
 (master pull-up), a ~10 µs LOW pulse each time a complete measurement
 snapshot is published (every 100 ms across the family; BASIC images
@@ -2673,6 +2674,7 @@ you may go longer.
 
 ## Wire-protocol details
 
+![Colour-coded map of the module register space.](images/api-register-map.png)
 For porting to platforms where the component is not used, or for
 debugging on a logic analyzer:
 
@@ -2684,6 +2686,7 @@ at `addr`. Example: a single transaction `i2c_master_transmit_receive(slave, {0x
 
 ### Register writes — byte-at-a-time (NOT auto-increment)
 
+![Reads auto-increment while writes go one byte at a time.](images/api-rw-asymmetry.png)
 ⚠ **Writes are NOT auto-increment.** A burst WRITE `<addr> + N bytes` lands **only the first byte** — bytes 1..N are dropped.
 
 **A multi-byte register is written byte by byte** — a separate single-byte I²C transaction per address:
@@ -2751,6 +2754,7 @@ Both options are equivalent.
 
 ### Atomicity / read-freeze (B1)
 
+![The atomic period latch closing one period and opening the next with no gap and no overlap.](images/period-atomic-latch.png)
 - **V03 float RMS block** (0x86+: U_RMS, U_PEAK, I_RMS, I_PEAK, P, PF, freq) — **read-freeze present**, the burst read is atomic.
 - **Digest block** (0x70-0x85) — read-freeze present.
 - **GC_TICK (0x59) / address-mirror (0x30) / CT-model mirrors (0x51-0x53)** — read-freeze **absent**; for a reliable read, use the **read-twice-agree** pattern (read twice, consider the value valid only if they match).
@@ -2882,7 +2886,7 @@ Internally the component guarantees:
 | Reading U / I / P / PF / frequency | ✅ | only for debugging on a logic analyzer |
 | Per-period energy accounting | ✅ | only if Wh is stored outside the component (e.g. in a database on the master side) |
 | Several modules on one bus | ✅ (sequential LATCH + shared settle, see [06_examples.md](06_examples.md)) | — |
-| Bidirectional accounting on BASIC | ✅ (via RT sampling — see [06_examples.md](06_examples.md)) | the alternative is your own RT-read loop + manual integration |
+| Bidirectional accounting on BASIC | ✅ (via RT reads — see [06_examples.md](06_examples.md)) | the alternative is your own RT-read loop + manual integration |
 | Porting to another platform | n/a | ✅ — see [09 · API Reference](09_api_reference.md) for wire-protocol details |
 | Hard RAM limit | rarely matters (~85 bytes per handle) | ✅ if even those ~85 bytes are critical |
 
@@ -2891,86 +2895,13 @@ right choice.
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────┐
-│  User application (app_main, FreeRTOS)              │
-│   rbamp_new(bus, 0x50, &dev);                       │
-│   rbamp_begin(dev);                                 │
-│   rbamp_set_sensor_class(dev, RBAMP_SENSOR_SCT013); │
-│   rbamp_set_ct_model(dev, 3);                       │
-│   rbamp_read_period_snapshot(dev, &snap, 50, false);│
-│   rbamp_energy_wh(dev, 0);                          │
-└─────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Public component API (rbamp.h)                     │
-│   ┌─────────────────────────────────────────────┐   │
-│   │ Lifecycle: rbamp_new / rbamp_del /          │   │
-│   │   rbamp_begin / rbamp_probe / rbamp_wait_ready │ │
-│   │ RT reads:    rbamp_read_voltage /           │   │
-│   │   rbamp_read_power(ch) / rbamp_read_all(&s) │   │
-│   │ Period:       rbamp_latch_period /          │   │
-│   │   rbamp_read_period_snapshot                │   │
-│   │ Configuration: rbamp_set_sensor_class /     │   │
-│   │   rbamp_set_ct_model / rbamp_set_ct_model_ch│   │
-│   │ Multi-module: rbamp_broadcast_latch         │   │
-│   │ Diagnostics:  rbamp_err_to_str(esp_err_t)   │   │
-│   └─────────────────────────────────────────────┘   │
-│                       │                             │
-│                       ▼                             │
-│   ┌─────────────────────────────────────────────┐   │
-│   │ Internal layer (src/rbamp.c):               │   │
-│   │  read_u8 / read_u32_le / read_float_le /    │   │
-│   │  write_reg / write_cmd                      │   │
-│   │  retry + sanity discipline                  │   │
-│   └─────────────────────────────────────────────┘   │
-│                       │                             │
-│                       ▼                             │
-│   ┌─────────────────────────────────────────────┐   │
-│   │ Handle state (struct rbamp_obj_t):          │   │
-│   │  • Wh accumulator (double[3], compile-out)  │   │
-│   │  • topology, channels, has_voltage_hw       │   │
-│   │  • last_latch_us (master_dt_ms tracking)    │   │
-│   └─────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  ESP-IDF i2c_master driver (driver/i2c_master.h)    │
-│   i2c_master_transmit / transmit_receive            │
-└─────────────────────────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  rbAmp module at address 0x50                       │
-│   • Measurement pipeline U / I / P / PF (~100 ms)   │
-│   • Period accumulator (atomic CMD_LATCH_PERIOD)    │
-└─────────────────────────────────────────────────────┘
-```
+![Layers from the application task through the rbamp component and the I2C driver to the rbAmp module.](images/esp-idf-architecture.png)
 
 ## Interaction diagrams
 
 ### The `rbamp_begin()` flow
 
-```text
-app           rbamp                i2c_master              rbAmp slave
-  │             │                    │                       │
-  ├─rbamp_begin(dev)►                │                       │
-  │             ├─read_u8(REG_VERSION)►                      │
-  │             │                    ├─tx_rx([0x03], 1) ────►│
-  │             │                    │◄─── version_byte ─────┤
-  │             │                    │                       │
-  │             ├─read_float_le(U_RMS)►(burst-read 4 bytes)   │
-  │             │  → 226.3 V         │                       │
-  │             │  → has_voltage_hw = true                   │
-  │             │                    │                       │
-  │             ├─write_cmd(LATCH)──►│                       │
-  │             │                    ├─tx([0x01, 0x27]) ────►│
-  │             │  vTaskDelay(50ms)  │                       │
-  │             │                    │                       │
-  │◄───ESP_OK───┤                    │                       │
-```
+![Sequence of bus transactions performed by rbamp_begin().](images/esp-idf-begin-flow.png)
 
 The first latch is a primer (the module returns whatever has
 accumulated since power-on, which is not suitable for tariff
@@ -2979,27 +2910,7 @@ discarded — the user code never sees it.
 
 ### The `rbamp_read_period_snapshot(dev, &snap, 50, false)` flow
 
-```text
-app           rbamp                i2c_master              rbAmp slave
-  │             │                    │                       │
-  ├─read_period_snapshot(snap)►      │                       │
-  │             ├─write_cmd(LATCH)──►│  t_now = esp_timer_get_time()
-  │             │                    │                       │
-  │             │  vTaskDelay(50ms)  │                       │
-  │             │                    │                       │
-  │             ├─read_u8(PERIOD_VALID)►│                    │
-  │             │  → bit0 = 1        │                       │
-  │             │                    │                       │
-  │             ├─read_float_le(AVG_P0)►(burst-read 4 bytes)  │
-  │             ├─read_float_le(MAX_P0)►(burst-read 4 bytes)  │
-  │             ├─read_u32_le(LATCH_MS)►(burst-read 4 bytes)  │
-  │             │                    │                       │
-  │             │  master_dt_ms = (t_now - last_latch_us)/1000│
-  │             │  energy_wh[ch] += avg_p[ch]*master_dt_ms/3.6e6│
-  │             │  last_latch_us = t_now                     │
-  │             │                    │                       │
-  │◄───ESP_OK───┤                    │                       │
-```
+![Sequence of a period snapshot read and the energy integration on the master.](images/esp-idf-snapshot-flow.png)
 
 The atomic latch on the module side guarantees that every measurement
 within a period lands in exactly one snapshot — no

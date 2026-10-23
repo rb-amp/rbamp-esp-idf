@@ -7,6 +7,8 @@ mains parameters over the I²C interface. It is built around a
 microcontroller with an integrated isolated analog
 front-end and factory calibration stored in flash.
 
+![Overview of how the application, the library, the I2C bus and the rbAmp modules fit together.](images/overview-architecture.png)
+
 ## The library's main purpose — monitoring multiple loads
 
 `components/rbamp` is designed **to work with a group of modules**
@@ -43,28 +45,7 @@ same handle directly — no fleet-API needed.
 
 ## The 80% scenario — mains + N sub-loads
 
-```text
-                                  ┌──────────────────────────┐
-                                  │   ESP32 (one master)     │
-                                  │   fleet-handle           │
-                                  └──┬─────────┬─────────┬───┘
-                                     │   I²C (shared bus)
-        ┌────────────────────────────┘         │         │
-        │                                      │         │
-   ┌────▼─────┐                          ┌─────▼─────┐   │
-   │ rbAmp #1 │                          │ rbAmp #2  │   │
-   │ MAINS    │                          │ Boiler    │   │
-   │ 0x50     │                          │ 0x51      │   │
-   └──────────┘                          └───────────┘   │
-        │ (at inlet)                     (load 1)       │
-                                                         │
-                                                   ┌─────▼─────┐
-                                                   │ rbAmp #3  │
-                                                   │ A/C       │
-                                                   │ 0x52      │
-                                                   └───────────┘
-                                                  (load 2)
-```
+![One master on a shared I2C bus with a mains module at the feed and sub-load modules on individual branches, one clamp per module.](images/fleet-topology-mains-plus-subloads.png)
 
 - 1 module at the inlet (mains) — total consumption and grid quality.
 - N modules on individual loads — per-channel accounting.
@@ -149,6 +130,8 @@ differences show up in the values the module returns and in the extra
 
 ## What this component does
 
+
+![Timeline of back-to-back 100 ms measurement windows, the optional data-ready pulses and a master-latched period snapshot.](images/window-period-latch-concept.png)
 Its main job is to hide the protocol exchange and relieve the user
 application of the routine of dealing with registers, byte order,
 and post-command settle times. Additionally, the component

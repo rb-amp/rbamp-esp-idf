@@ -8,8 +8,8 @@
  *   loop, then one shared settle, then per-device
  *   @c rbamp_read_period_snapshot with @c skip_latch=true. Skew at 100 kHz
  *   is roughly 200-400 µs per I²C transaction (write 2 bytes + STOP) — far
- *   below the 100 ms publish window, so energy integration error is < 0.2 % per
- *   period. For tight sync (≥ 8 modules) use Strategy 2 — opt each
+ *   below the 100 ms publish window, so the skew is negligible against a period.
+ *   For tight sync (≥ 8 modules) use Strategy 2 — opt each
  *   module in to GC via @c REG_FLEET_CONFIG bit 0, then call
  *   ::rbamp_broadcast_latch (truth-doc §5).
  *

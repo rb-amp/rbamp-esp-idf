@@ -10,6 +10,7 @@ Physically connecting the sensor (clamp orientation, checking L/N
 polarity) is covered in [04_hardware.md](04_hardware.md). This chapter is about
 **choosing the model** and the **API calls**.
 
+![How the SCT-013 clamp is fitted on the line conductor with the arrow toward the load.](images/hw-ct-install.png)
 ## Sensor class
 
 rbAmp modules work with CT clamps from the **SCT-013** family. You must
@@ -18,6 +19,8 @@ tell the module the sensor class once, with
 CT clamp model with `rbamp_set_ct_model()`.
 
 ## Choosing the SCT-013 model
+
+![Decision chart for choosing the SCT-013 model from the largest expected current plus 30 percent margin.](images/sct-model-chooser.png)
 
 The SCT-013 family has seven models that differ in maximum primary-circuit
 current. All seven codes `{1, 2, 3, 4, 5, 6, 7}` are supported.
@@ -44,7 +47,7 @@ The basic rule:
 
 1. **Determine the maximum current** that can flow in the circuit
    (based on the largest load + 30 % margin).
-2. Choose the model whose range covers this value.
+2. Choose the **smallest rated clamp above** this value.
 3. **Do not over-size by more than 5×.** An SCT-013-100 clamp on a
    circuit with a 5 A maximum will work, but it gives low resolution
    and a large error at typical values.
@@ -58,7 +61,8 @@ measurement becomes nonlinear above the rating.
 
 If your load has a peak current above the clamp rating, choose the next
 size up. For example, for a washing machine with a 12 A inrush current
-(while the running rating is 2–3 A) an SCT-013-030 is better than an
+(while the running rating is 2–3 A): 12 A × 1.3 = 15.6 A, so the smallest
+rated clamp above it is the SCT-013-020 (code 6) — better than an
 SCT-013-005.
 
 ## How to tell the module about your choice
@@ -252,6 +256,8 @@ modules it is equivalent to `rbamp_set_ct_model_ch(dev, 0, code)`.
 
 **Two** SCT-013 clamps of different ratings are installed on the same
 wire:
+
+![Two clamps of different ratings fitted on the same conductor of one module.](images/ct-install-dual.png)
 
 - Channel 0 — the small clamp (e.g. SCT-013-005, 5 A): sees small
   currents with better resolution and a lower noise floor.

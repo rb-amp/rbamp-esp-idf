@@ -19,6 +19,8 @@ functions should return `ESP_OK`. If you frequently see `ESP_FAIL`
 or `ESP_ERR_INVALID_RESPONSE` in the logs, jump straight to the
 "Module doesn't respond over I²C" section below.
 
+![Troubleshooting decision tree grouped by symptom.](images/troubleshoot-flowchart.png)
+
 ## Module doesn't respond over I²C
 
 **What you see:** `rbamp_begin(dev)` returns `ESP_FAIL` or

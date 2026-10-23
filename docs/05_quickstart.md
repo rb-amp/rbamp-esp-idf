@@ -12,6 +12,8 @@ SCT-013 by range) live in the adjacent chapters:
 - [03 · Current sensor selection](03_sensor_selection.md) — which SCT-013 model
   to use and why
 
+![Flowchart of the steps from wiring to the first reading and the first energy value.](images/first-reading-flow.png)
+
 ## What you'll need
 
 - An rbAmp module (any module line; for simplicity a **UI1** — one voltage input plus one current channel; other variants are listed in [03](03_sensor_selection.md#sku-lineup--what-fits-the-task))
@@ -113,6 +115,7 @@ A UI module also needs its L/N voltage connection; the CT clamp plugs into the
 module's 3.5 mm CT jack (labelled `I0`, `I1`, … on the PCB); the mains side has `L` and `N` terminals. See
 [04 · Wiring, "Mains and CT connection"](04_hardware.md#mains-and-ct-connection).
 
+![Step-by-step connection of the mains tap and the clamp.](images/mains-ct-connection.png)
 ## Step 3 — First project (first reading)
 
 A minimal `main/main.c`: bring up the bus, tell the module which CT clamp you

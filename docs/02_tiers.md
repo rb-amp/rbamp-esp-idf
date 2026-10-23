@@ -8,6 +8,8 @@ complete bundle of **hardware revision and firmware**, not a software
 flag. Moving between lines requires a physical SKU change, not a
 firmware update.
 
+![The BASIC and STANDARD (STD) module lines side by side.](images/module-lines.png)
+
 From the component and user-code perspective: **one handle and one
 `rbamp_*` API serve both shipping module lines**. `rbamp_begin()` detects
 whether the module behind the handle is a BASIC or an STD module
@@ -64,6 +66,7 @@ component's Wh counter on BASIC does not include it.
 
 ### Bidirectional metering on BASIC (master-side)
 
+![How energy is produced on a BASIC module (integrated on the master) and on a STANDARD (STD) module (on-device counters).](images/energy-basic-vs-std.png)
 If you need to track export to the grid separately on a BASIC module,
 **do it on the master side**. The RT power
 `rbamp_read_power(dev, 0, &p)` is signed, so:
@@ -159,6 +162,7 @@ PRO-specific API in version 1.7.2.
 
 ## How to detect the module line at runtime
 
+![Flowchart for finding out whether you own a BASIC or a STANDARD (STD) module.](images/module-line-detect.png)
 The product line is detected for you by `rbamp_begin()`:
 
 ```c

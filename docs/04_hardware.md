@@ -12,6 +12,7 @@ below.
 
 ## LV-side pinout
 
+![The low-voltage pins of the module: VCC, GND, SDA, SCL and the optional data-ready line.](images/hw-pinout.png)
 The module runs on 3.3 V I²C logic and is **5 V-tolerant** on the
 signal lines. All LV pins are fully galvanically isolated from mains.
 
@@ -30,7 +31,7 @@ signal lines. All LV pins are fully galvanically isolated from mains.
 - **Nominal voltage**: 5 V DC
 - **Allowable range**: 4.5..5.5 V
 - **Current draw**: ~15 mA typical, ~25 mA peak during flash writes
-- **Ripple**: < 50 mV peak-to-peak (for ADC accuracy)
+- **Ripple**: < 50 mV peak-to-peak (for measurement accuracy)
 
 The module carries an on-board regulator, RC filter, ceramic capacitors
 and a ferrite bead — no additional filtering is required from the user.
@@ -71,6 +72,7 @@ side (CT clamp, voltage divider) and the LV side (I²C). Consequences:
 
 ## Mains and CT connection
 
+![Mains-side wiring: the L and N voltage tap and the clamp on the line conductor.](images/mains-ct-connection-panel.png)
 > ⚠ **Mains voltage can kill.** Disconnect and lock out the circuit before
 > connecting the L/N terminals or fitting the clamp; have a qualified person
 > do mains wiring and any work inside a panel. Clamp **ONE conductor only
@@ -125,11 +127,16 @@ with a sharp blade:
 
 ### Rule of thumb
 
+![Pull-up rules for one, two and three or more modules on the bus.](images/i2c-pullup-rules.png)
 | rbAmp modules on the bus | Pull-ups |
 |:---:|---|
 | 1 | Leave as-is (the built-in 4.7 kΩ works) |
 | 2 | Leave on one, cut on the other |
-| 3+ | Cut on all modules, fit a single external 2.2…4.7 kΩ pair near the ESP32 |
+| 3 | Cut on all modules, fit one external 2.7…3.3 kΩ pair near the ESP32 |
+| 4…6 | Cut on all modules, one external 2.2…2.7 kΩ pair near the ESP32 |
+| 7…16 | Cut on all modules, one external 1.5…2.2 kΩ pair near the ESP32; check the bus capacitance (≤ 400 pF), lower the bus speed if needed |
+
+The external values are recommended values (calculated from the I²C specification: sink current ≤ 3 mA at 3.3 V, bus capacitance ≤ 400 pF).
 
 > **If in doubt**: measure the resistance between SDA and the 3V3 line with
 > all devices unpowered. It should be in the **1.5..4.7 kΩ** range. Lower —
@@ -178,6 +185,8 @@ optimizations below are designed precisely for this topology; a single
 module is a special case (the same handle, but the fleet calls degenerate
 into trivial ones).
 
+![Several rbAmp modules on one I2C bus with the pull-ups handled per the rules.](images/hw-multimodule-bus.png)
+
 #### Typical deployments
 
 | Scenario | Configuration | Module count |
@@ -190,7 +199,7 @@ into trivial ones).
 
 - **Module count**: up to ~16 (total bus capacitance ≤ 400 pF at 100 kHz).
 - **Addresses**: each module has its own 7-bit address (range `0x08..0x77`). All modules ship from the factory on `0x50` — re-address them one at a time before wiring them in parallel (see below on two-phase commit and provisioning via `rbamp_provision()`).
-- **Pull-ups (important for a fleet bus)**: the ESP32-internal pull-ups (~45 kΩ) are **too weak** for a multi-module bus with long traces and noise. For reliable operation you need **external ~4.7 kΩ pull-ups** to 3.3 V on SCL/SDA at a single point on the bus + the built-in pull-ups **cut** on all modules but one (or cut on all and keep only the external ones). This is part of the three-layer mitigation against bus-hang on a marginal bus — see [10 · Troubleshooting](10_troubleshooting.md).
+- **Pull-ups (important for a fleet bus)**: the ESP32-internal pull-ups (~45 kΩ) are **too weak** for a multi-module bus with long traces and noise. For reliable operation you need **external pull-ups** (2.7…3.3 kΩ for 3 modules, lower for larger buses — see the table above) to 3.3 V on SCL/SDA at a single point on the bus + the built-in pull-ups **cut** on all modules but one (or cut on all and keep only the external ones). This is part of the three-layer mitigation against bus-hang on a marginal bus — see [10 · Troubleshooting](10_troubleshooting.md).
 
 #### Addressing — provisioning and field-swap
 
@@ -201,6 +210,8 @@ to flash.
 
 In code this is a single call — `rbamp_provision(bus, desired_addr, save_config, &dev)`. It verifies that there is **really only one virgin module on 0x50** on the bus, re-addresses it via a two-phase commit (see below), optionally saves the user config, and returns a ready handle.
 
+![Provisioning flow: connect one new module at address 0x50, give it its address, then the next.](images/fleet-provisioning-one-virgin.png)
+
 > ⚠ **Provisioning discipline (MUST)**: there must be **exactly one** virgin module (on `0x50`) on the bus at the moment `rbamp_provision()` is called. If two modules at the same address respond on I²C simultaneously — a collision on the data phase, behavior is **undefined**, and there is no way to distinguish them (open-drain wired-AND). Recovery path: power-cycle, switch physically to a single-module bring-up, provision them one at a time, then connect the rest. See [10 · Troubleshooting](10_troubleshooting.md), the “Provisioning fail / address conflict” section.
 >
 > If you do not have a fleet handle and you re-address manually via `rbamp_prepare_address_change()` + `rbamp_commit_address_change()` (the low-level form) — the discipline is exactly the same: one virgin at a time.
@@ -209,6 +220,8 @@ In code this is a single call — `rbamp_provision(bus, desired_addr, save_confi
 
 The firmware supports an address change in **production mode** via a
 two-phase sequence:
+
+![The steps of a two-phase address change from staging the new address to verifying it.](images/init-addr-2phase.png)
 
 ```
 1. write candidate_addr → REG_I2C_ADDRESS (0x30, in RAM)
@@ -242,6 +255,8 @@ On a 50 kHz bus a single register-read transaction ≈ 200-400 µs (depends on t
 
 For tariff metering all modules must latch the **same** time interval. Two strategies:
 
+![Sequential latch of each module compared with one General-Call frame latching all modules at once.](images/period-broadcast-latch.png)
+
 **Strategy 1 — sequential latch + shared settle** (works on any firmware):
 
 ```c
@@ -265,6 +280,8 @@ Skew between modules: 16 modules × ~1 ms/latch = ~16 ms relative to a 60-second
 **Strategy 2 — General-Call broadcast latch** (requires enabling):
 
 All modules receive the latch in a single I²C frame on addr `0x00`:
+
+![The layout of the 5-byte General-Call latch frame sent to address 0x00.](images/init-gc-frame.png)
 
 ```
 addr=0x00 | A5 27 <group> <tick_lo> <tick_hi>   (5 bytes)
@@ -323,6 +340,7 @@ GPIO based on your board's specific layout.
 
 ### ESP32 (original / DevKitC / WROOM)
 
+![Reference wiring of an ESP32 to an rbAmp module with the clamp in the I0 jack.](images/hw-wiring-esp32.png)
 ```c
 const i2c_master_bus_config_t bus_cfg = {
     .i2c_port  = I2C_NUM_0,
