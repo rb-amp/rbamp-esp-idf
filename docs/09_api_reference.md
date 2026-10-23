@@ -202,6 +202,8 @@ typedef struct {
 
 ### `rbamp_period_snapshot_t`
 
+> **Native protocol:** [Detecting a module restart (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#detecting-a-module-restart)
+
 Returned by `rbamp_read_period_snapshot()`. The energy-accounting
 primitive.
 
@@ -386,6 +388,8 @@ from the bus. Safe to call with `NULL` — it is a no-op.
 
 ### `rbamp_begin`
 
+> **Native protocol:** [02 · Initialization and Start-up (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#02--initialization-and-start-up) · [BASIC or STD? (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#basic-or-std) · [Continuous polling cycle (recommended) (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#continuous-polling-cycle-recommended)
+
 ```c
 esp_err_t rbamp_begin(rbamp_handle_t dev);
 ```
@@ -466,6 +470,8 @@ version (not `0` and not `0xFF`); `ESP_FAIL` otherwise.
 
 ### `rbamp_wait_ready`
 
+> **Native protocol:** [02 · Initialization and Start-up (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#02--initialization-and-start-up) · [3. `DATA_VALID` (`0xCE`) never becomes 1 (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#3-data_valid-0xce-never-becomes-1) · [4 · Register map (production v1.3) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#4--register-map-production-v13)
+
 ```c
 esp_err_t rbamp_wait_ready(rbamp_handle_t dev, uint32_t timeout_ms);
 ```
@@ -477,6 +483,8 @@ power-on — the module may need up to 100 ms for the first RT window.
 expires; `ESP_ERR_TIMEOUT` otherwise.
 
 ### Handle-state getters
+
+> **Native protocol:** [BASIC or STD? (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#basic-or-std) · [Multi-channel current (UI2 / UI3 / UI5 / UI7) (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#multi-channel-current-ui2--ui3--ui5--ui7) · [4.10 V03 real-time block (0x86..0xBD) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#410-v03-real-time-block-0x860xbd)
 
 ```c
 uint8_t          rbamp_firmware_version(rbamp_handle_t dev);
@@ -523,6 +531,8 @@ link glitches in the ESP-IDF I²C stack.
 
 ### Per-channel reads
 
+> **Native protocol:** [RT register reference (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#rt-register-reference) · [Bidirectional accounting (STANDARD (STD)) (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#bidirectional-accounting-standard-std)
+
 ```c
 esp_err_t rbamp_read_voltage      (rbamp_handle_t dev, uint8_t phase, float *out);
 esp_err_t rbamp_read_voltage_peak (rbamp_handle_t dev, uint8_t phase, float *out);
@@ -546,6 +556,8 @@ esp_err_t rbamp_read_frequency    (rbamp_handle_t dev,                float *out
 If `ch` or `phase` is out of range, returns `ESP_ERR_INVALID_ARG`.
 
 ### One-shot read of the whole RT block
+
+> **Native protocol:** [RT register reference (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#rt-register-reference) · [Polling — single module (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#polling--single-module) · [4.10 V03 real-time block (0x86..0xBD) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#410-v03-real-time-block-0x860xbd)
 
 ```c
 esp_err_t rbamp_read_all(rbamp_handle_t dev, rbamp_snapshot_t *out);
@@ -586,6 +598,8 @@ is not exposed by this library, and on a BASIC handle both return
 `ESP_ERR_NOT_SUPPORTED`.
 
 ### Channel access (channels 3 and above)
+
+> **Native protocol:** [Multi-channel current (UI2 / UI3 / UI5 / UI7) (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#multi-channel-current-ui2--ui3--ui5--ui7) · [4.14 Channel access window (`0x32` + `0x3C..0x3F`) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#414-channel-access-window-0x32--0x3c0x3f)
 
 Channels 0–2 live in the flat RT block. On the larger SKUs (UI5 / UI7)
 channels 3+ are reachable only through the module's channel window. The
@@ -635,6 +649,8 @@ sweep — an unchanged value proves that all the reads came from one
 commit. The digest carries no CRC.
 
 ### Data-ready (DRDY)
+
+> **Native protocol:** [01 · Hardware Connection (hardware-connection)](https://github.com/rb-amp/rbamp-docs/blob/main/hardware-connection.md#01--hardware-connection) · [03 · Real-Time Polling (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#03--real-time-polling) · [Polling — single module (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#polling--single-module)
 
 ![Timing of the 100 ms real-time window, the data-ready pulse and the atomic block read.](images/rt-window-timing.png)
 Every module drives an optional open-drain `DRDY` output: idle HIGH
@@ -697,6 +713,8 @@ while (1) {
 
 ### BASIC digest
 
+> **Native protocol:** [4.9 Digest window (0x70..0x85) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#49-digest-window-0x700x85) · [8.7 DIGEST round-trip — configure + read (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#87-digest-round-trip--configure--read)
+
 The digest is a compact block that a BASIC module publishes with each
 window. It lets the master read the window result in **one I²C
 transaction** instead of one per field.
@@ -735,6 +753,8 @@ See [01 · Overview](01_overview.md) for the big picture and
 
 ### `rbamp_latch_period`
 
+> **Native protocol:** [04 · Period Metering and Tariff Accounting (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#04--period-metering-and-tariff-accounting)
+
 ```c
 esp_err_t rbamp_latch_period(rbamp_handle_t dev);
 ```
@@ -748,6 +768,8 @@ encapsulates the entire sequence.
 
 ### `rbamp_is_period_valid`
 
+> **Native protocol:** [04 · Period Metering and Tariff Accounting (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#04--period-metering-and-tariff-accounting) · [Calibration and accuracy (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#calibration-and-accuracy) · [7.5 Failed-snapshot period preservation (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#75-failed-snapshot-period-preservation)
+
 ```c
 esp_err_t rbamp_is_period_valid(rbamp_handle_t dev, bool *out);
 ```
@@ -756,6 +778,8 @@ Reads the snapshot-ready bit. `*out = true` if the last snapshot is
 fresh.
 
 ### `rbamp_read_period_avg_power`
+
+> **Native protocol:** [Period snapshot registers (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#period-snapshot-registers) · [4.11 V03 period block (0xBE..0xCF) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#411-v03-period-block-0xbe0xcf) · [4.12 V03 Q + period ch0 (0xD0..0xE3, production build) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#412-v03-q--period-ch0-0xd00xe3-production-build)
 
 ```c
 esp_err_t rbamp_read_period_avg_power(rbamp_handle_t dev,
@@ -768,6 +792,8 @@ check.
 
 ### `rbamp_read_period_max_power`
 
+> **Native protocol:** [Period snapshot registers (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#period-snapshot-registers) · [4.12 V03 Q + period ch0 (0xD0..0xE3, production build) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#412-v03-q--period-ch0-0xd00xe3-production-build)
+
 ```c
 esp_err_t rbamp_read_period_max_power(rbamp_handle_t dev, float *out);
 ```
@@ -776,6 +802,8 @@ Peak instantaneous power on channel 0 over the snapshot period.
 `ch=0` only on v1 firmware.
 
 ### `rbamp_read_period_latch_ms`
+
+> **Native protocol:** [13. Multi-module clock drift in long tests (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#13-multi-module-clock-drift-in-long-tests) · [4.13 Diagnostic chip-side dt (0xEC) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#413-diagnostic-chip-side-dt-0xec)
 
 ```c
 esp_err_t rbamp_read_period_latch_ms(rbamp_handle_t dev, uint32_t *out);
@@ -788,6 +816,8 @@ The period duration as seen by the **device**, in ms.
 > `module_window_ms`) from `rbamp_period_snapshot_t`, not this field.
 
 ### `rbamp_read_period_snapshot`
+
+> **Native protocol:** [Continuous polling cycle (recommended) (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#continuous-polling-cycle-recommended) · [Multi-module — simultaneous snapshot (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#multi-module--simultaneous-snapshot) · [Calibration and accuracy (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#calibration-and-accuracy)
 
 ```c
 esp_err_t rbamp_read_period_snapshot(rbamp_handle_t dev,
@@ -842,6 +872,8 @@ snapshot integrates over the module's own window instead.
 > refresh at ~10 Hz.
 
 ### `rbamp_read_uptime_s`
+
+> **Native protocol:** [Detecting a module restart (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#detecting-a-module-restart) · [4.6 Health / diagnostics (0x46..0x4F) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#46-health--diagnostics-0x460x4f)
 
 ```c
 esp_err_t rbamp_read_uptime_s(rbamp_handle_t dev, uint32_t *out);
@@ -898,6 +930,8 @@ A convenience wrapper for the default arguments: `settle_ms=50`,
 `skip_latch=false`. Use it for ordinary periodic polling.
 
 ## Energy accounting (master-side accumulator)
+
+> **Native protocol:** [Master-side algorithm (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#master-side-algorithm) · [7 · Semantics (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#7--semantics)
 
 If the component is built without `CONFIG_RBAMP_DISABLE_ENERGY=y`,
 accessor functions are available for the Wh accumulator inside the
@@ -990,6 +1024,8 @@ configuration to flash).
 
 ### `rbamp_read_variant`
 
+> **Native protocol:** [Module variant auto-detection (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#module-variant-auto-detection) · [rbAmp Wire-Protocol Reference (v1.3) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#rbamp-wire-protocol-reference-v13) · [3.6 Canonical detection algorithm (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#36-canonical-detection-algorithm)
+
 ```c
 esp_err_t rbamp_read_variant(rbamp_handle_t dev, rbamp_variant_t *out);
 ```
@@ -1017,6 +1053,8 @@ reflashing.
 
 ### `rbamp_read_capability`
 
+> **Native protocol:** [Module variant auto-detection (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#module-variant-auto-detection) · [3.2 `CAPABILITY` (regs `0x57/0x58`, u16 LE, read-only) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#32-capability-regs-0x570x58-u16-le-read-only) · [8 · Wire-trace examples (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#8--wire-trace-examples)
+
 ```c
 esp_err_t rbamp_read_capability(rbamp_handle_t dev, uint16_t *out);
 ```
@@ -1029,6 +1067,8 @@ registers are `0.0f`. See the section
 
 ### `rbamp_has_voltage`
 
+> **Native protocol:** [3.2 `CAPABILITY` (regs `0x57/0x58`, u16 LE, read-only) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#32-capability-regs-0x570x58-u16-le-read-only)
+
 ```c
 bool rbamp_has_voltage(rbamp_handle_t dev);
 ```
@@ -1040,6 +1080,8 @@ perform an I²C operation.
 
 ### `rbamp_read_product_id`
 
+> **Native protocol:** [3.5 `PRODUCT_ID` (`0x54`, u8, read-only) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#35-product_id-0x54-u8-read-only) · [4.8 Identity (0x54..0x6F) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#48-identity-0x540x6f)
+
 ```c
 esp_err_t rbamp_read_product_id(rbamp_handle_t dev, uint8_t *out);
 ```
@@ -1050,6 +1092,8 @@ device at an address is really an rbAmp, and not some other I²C
 slave that happened to answer on the same address.
 
 ### `rbamp_read_uid`
+
+> **Native protocol:** [4.8 Identity (0x54..0x6F) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#48-identity-0x540x6f)
 
 ```c
 esp_err_t rbamp_read_uid(rbamp_handle_t dev, uint8_t uid[12]);
@@ -1088,6 +1132,8 @@ calibrated under older firmware reads false after the update until one
 
 ### `rbamp_save_user_config`
 
+> **Native protocol:** [6.5 Provisioning — fresh-flash + SAVE (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#65-provisioning--fresh-flash--save) · [8.6 Fresh-flash provisioning (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#86-fresh-flash-provisioning)
+
 ```c
 esp_err_t rbamp_save_user_config(rbamp_handle_t dev);
 ```
@@ -1115,6 +1161,8 @@ Returns:
 > [03 · Current sensor selection](03_sensor_selection.md#production-vs-factory-mode-persistence-reference).
 
 ### `rbamp_read_active_address`
+
+> **Native protocol:** [4.5 Address (0x30..0x31) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#45-address-0x300x31)
 
 ```c
 esp_err_t rbamp_read_active_address(rbamp_handle_t dev, uint8_t *out);
@@ -1218,6 +1266,8 @@ you want atomicity, there must be no rejected write between them.
 
 ### `rbamp_read_last_error`
 
+> **Native protocol:** [3. `DATA_VALID` (`0xCE`) never becomes 1 (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#3-data_valid-0xce-never-becomes-1) · [Error codes (`REG_ERROR` = `0x02`) (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#error-codes-reg_error--0x02) · [4 · Register map (production v1.3) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#4--register-map-production-v13)
+
 ```c
 esp_err_t rbamp_read_last_error(rbamp_handle_t dev, uint8_t *out);
 ```
@@ -1230,6 +1280,8 @@ own outcome.
 Used in Channel B (DUT-side rejection) for the extended reason code.
 
 ### `rbamp_has_error`
+
+> **Native protocol:** [5 · Wire protocol (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#5--wire-protocol)
 
 ```c
 esp_err_t rbamp_has_error(rbamp_handle_t dev, bool *out);
@@ -1246,6 +1298,8 @@ clobbered REG_ERROR, but bit3 preserves the fact that at least one
 of them was rejected.
 
 ### `rbamp_read_event_flags` / `rbamp_clear_event_flags`
+
+> **Native protocol:** [8.8 Threshold event flow — write threshold → trigger → W1C clear (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#88-threshold-event-flow--write-threshold--trigger--w1c-clear)
 
 ```c
 esp_err_t rbamp_read_event_flags(rbamp_handle_t dev, uint8_t *out);
@@ -1265,6 +1319,8 @@ polling cycle.
 
 ### `rbamp_clear_error`
 
+> **Native protocol:** [Error codes (`REG_ERROR` = `0x02`) (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#error-codes-reg_error--0x02) · [6.7 Error-state recovery — decision tree (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#67-error-state-recovery--decision-tree)
+
 ```c
 esp_err_t rbamp_clear_error(rbamp_handle_t dev);
 ```
@@ -1275,6 +1331,8 @@ to clear a durable error** in tandem with `clear_event_flags(1<<3)`
 will leave bit3 at `1` after a few hundred milliseconds because of the re-latch.
 
 ### Events and the alarm line
+
+> **Native protocol:** [4.4 Fleet config (0x27..0x2F) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#44-fleet-config-0x270x2f) · [8.8 Threshold event flow — write threshold → trigger → W1C clear (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#88-threshold-event-flow--write-threshold--trigger--w1c-clear)
 
 Events are one model on both lines: sticky flags (`RBAMP_EVENT_*`),
 write-1-to-clear. Flags that are also set in the **event mask** hold
@@ -1309,6 +1367,8 @@ On multi-channel modules (`I2`, `I3`, `UI2`, `UI3`, and the larger
 `rbamp_configure_channels`.
 
 ### `rbamp_configure_channels`
+
+> **Native protocol:** [8.6 Fresh-flash provisioning (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#86-fresh-flash-provisioning)
 
 ```c
 esp_err_t rbamp_configure_channels(rbamp_handle_t dev,
@@ -1358,6 +1418,8 @@ Returns:
 
 ### `rbamp_read_ct_model_ch`
 
+> **Native protocol:** [4.7 CT model verify mirrors (0x51..0x53) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#47-ct-model-verify-mirrors-0x510x53) · [8.10 CT model verify-mirror read-back (post-binding sanity) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#810-ct-model-verify-mirror-read-back-post-binding-sanity)
+
 ```c
 esp_err_t rbamp_read_ct_model_ch(rbamp_handle_t dev,
                                  uint8_t channel,
@@ -1397,6 +1459,8 @@ all managed handles and the fleet itself — after the call, any
 handle pointers obtained via `rbamp_fleet_get` are **invalid**.
 
 ### Discovery — `rbamp_fleet_scan`
+
+> **Native protocol:** [Multi-module setup (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#multi-module-setup) · [Multi-module polling — three strategies (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#multi-module-polling--three-strategies) · [Multi-module issues (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#multi-module-issues)
 
 ```c
 esp_err_t rbamp_fleet_scan(rbamp_fleet_t fleet,
@@ -1461,6 +1525,8 @@ excluded). `_add` lets you manually add a handle created separately
 
 ### Polling — `rbamp_fleet_poll_all`
 
+> **Native protocol:** [Multi-module setup (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#multi-module-setup) · [Multi-module polling — three strategies (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#multi-module-polling--three-strategies)
+
 ```c
 esp_err_t rbamp_fleet_poll_all(rbamp_fleet_t fleet,
                                rbamp_snapshot_t *snaps,
@@ -1511,6 +1577,8 @@ error flag at the moment of polling. Either pointer may be passed as
 
 ### Addressing and conflict checking
 
+> **Native protocol:** [Multi-module issues (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#multi-module-issues)
+
 ```c
 esp_err_t rbamp_fleet_assign_address(rbamp_fleet_t fleet,
                                      rbamp_handle_t dev,
@@ -1536,6 +1604,8 @@ guarantee** catching identical modules — see the provisioning
 discipline.
 
 ### Provisioning — `rbamp_provision`
+
+> **Native protocol:** [6.5 Provisioning — fresh-flash + SAVE (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#65-provisioning--fresh-flash--save)
 
 ```c
 esp_err_t rbamp_provision(i2c_master_bus_handle_t bus,
@@ -1567,6 +1637,8 @@ the specified address. Internally:
 > rbamp_provision returned an error".
 
 ### Fleet GC sync — synchronous snapshots across the whole fleet
+
+> **Native protocol:** [General Call (broadcast at address 0x00) (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#general-call-broadcast-at-address-0x00) · [Multi-module — simultaneous snapshot (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#multi-module--simultaneous-snapshot) · [6.3 GC broadcast snapshot — opt-in fleet sync (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#63-gc-broadcast-snapshot--opt-in-fleet-sync)
 
 ```c
 esp_err_t rbamp_fleet_enable_gc_all(rbamp_fleet_t fleet,
@@ -1625,6 +1697,8 @@ adding it to a fleet, or want fine-grained control.
 
 ### `rbamp_enable_gc` / `rbamp_read_fleet_config`
 
+> **Native protocol:** [General Call (broadcast at address 0x00) (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#general-call-broadcast-at-address-0x00) · [4.4 Fleet config (0x27..0x2F) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#44-fleet-config-0x270x2f)
+
 ```c
 esp_err_t rbamp_enable_gc(rbamp_handle_t dev, bool enable);
 esp_err_t rbamp_read_fleet_config(rbamp_handle_t dev, uint8_t *out);
@@ -1660,6 +1734,8 @@ frame. Used for missed-frame detection (if two modules have a
 different tick, someone missed a frame).
 
 ### `rbamp_read_label` / `rbamp_write_label`
+
+> **Native protocol:** [8.3 Multi-byte WRITE — `LABEL` byte-at-a-time (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#83-multi-byte-write--label-byte-at-a-time)
 
 ```c
 esp_err_t rbamp_read_label(rbamp_handle_t dev, char out[9]);
@@ -1712,6 +1788,8 @@ For a detailed model-selection guide, see
 [03 · Current sensor selection](03_sensor_selection.md).
 
 ### `rbamp_set_sensor_class`
+
+> **Native protocol:** [Setting the sensor class and CT model (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#setting-the-sensor-class-and-ct-model) · [4.3 System (0x20..0x25) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#43-system-0x200x25) · [6.2 CT model binding — pure staging + per-channel CMD (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#62-ct-model-binding--pure-staging--per-channel-cmd)
 
 ```c
 esp_err_t rbamp_set_sensor_class(rbamp_handle_t dev,
@@ -1786,6 +1864,8 @@ For multi-channel modules use the per-channel form below.
 
 ### `rbamp_set_ct_model_ch`
 
+> **Native protocol:** [Setting the sensor class and CT model (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#setting-the-sensor-class-and-ct-model) · [6.2 CT model binding — pure staging + per-channel CMD (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#62-ct-model-binding--pure-staging--per-channel-cmd)
+
 ```c
 esp_err_t rbamp_set_ct_model_ch(rbamp_handle_t dev,
                                 uint8_t channel, uint8_t code);
@@ -1859,6 +1939,8 @@ generic preset — use it only when re-pairing a module with a new sensor
 in service, and follow it with a calibration.
 
 ### `rbamp_read_sensor_class`
+
+> **Native protocol:** [4.3 System (0x20..0x25) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#43-system-0x200x25)
 
 ```c
 esp_err_t rbamp_read_sensor_class(rbamp_handle_t dev, uint8_t *out);
@@ -1948,6 +2030,8 @@ changes.
 block: gains, noise and THD floors) and checks the command verdict.
 
 ### `rbamp_prepare_address_change` / `rbamp_commit_address_change`
+
+> **Native protocol:** [Address change (initialization)](https://github.com/rb-amp/rbamp-docs/blob/main/initialization.md#address-change) · [4.5 Address (0x30..0x31) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#45-address-0x300x31) · [6.1 Address change — two-phase commit (production-OK) (api-reference)](https://github.com/rb-amp/rbamp-docs/blob/main/api-reference.md#61-address-change--two-phase-commit-production-ok)
 
 Changing the module's I²C address is done via a **two-phase commit**
 in production mode. The firmware deliberately excludes the address
@@ -2271,6 +2355,8 @@ address.
 
 ### Life-time energy counters
 
+> **Native protocol:** [Bidirectional accounting (STANDARD (STD)) (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#bidirectional-accounting-standard-std)
+
 For a module that keeps persisted energy counters on the device
 (`RBAMP_STD_CAP_ONDEVICE_ENERGY`).
 
@@ -2532,6 +2618,8 @@ if (err != ESP_OK) {
 ```
 
 ### `rbamp_retry_exhaustion_count` / `rbamp_sanity_reject_count` / `rbamp_reset_counters`
+
+> **Native protocol:** [05 · Troubleshooting (troubleshooting)](https://github.com/rb-amp/rbamp-docs/blob/main/troubleshooting.md#05--troubleshooting)
 
 ```c
 uint32_t rbamp_retry_exhaustion_count(rbamp_handle_t dev);
