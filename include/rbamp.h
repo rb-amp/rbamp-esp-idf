@@ -152,8 +152,8 @@ typedef enum {
     RBAMP_VARIANT_I3      = 6, /**< 3 current, no voltage / power. */
     RBAMP_VARIANT_UI5     = 7, /**< 5 current + voltage + power (senior SKU). */
     RBAMP_VARIANT_UI7     = 8, /**< 7 current + voltage + power (senior SKU). */
-    RBAMP_VARIANT_U3I3    = 9, /**< STD line: 3 voltage + 3 current (three-phase meter). */
-    RBAMP_VARIANT_U3I6    = 10,/**< STD line: 3 voltage + 6 current. */
+    RBAMP_VARIANT_3PH_3CH = 9, /**< STD line: 3 voltage + 3 current (three-phase meter). */
+    RBAMP_VARIANT_3PH_6CH = 10,/**< STD line: 3 voltage + 6 current. */
 } rbamp_variant_t;
 
 /* -------------------------------------------------------------------------

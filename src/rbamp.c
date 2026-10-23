@@ -834,8 +834,8 @@ static rbamp_variant_t _std_variant_map(uint8_t v)
         case RBAMP_STD_VARIANT_UI2:  return RBAMP_VARIANT_UI2;
         case RBAMP_STD_VARIANT_UI3:  return RBAMP_VARIANT_UI3;
         case RBAMP_STD_VARIANT_I1:   return RBAMP_VARIANT_I1;
-        case RBAMP_STD_VARIANT_U3I3: return RBAMP_VARIANT_U3I3;
-        case RBAMP_STD_VARIANT_U3I6: return RBAMP_VARIANT_U3I6;
+        case RBAMP_STD_VARIANT_3PH_3CH: return RBAMP_VARIANT_3PH_3CH;
+        case RBAMP_STD_VARIANT_3PH_6CH: return RBAMP_VARIANT_3PH_6CH;
         default:                     return RBAMP_VARIANT_UNKNOWN;
     }
 }

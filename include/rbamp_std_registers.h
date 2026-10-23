@@ -38,7 +38,7 @@
 #define RBAMP_STD_REG_ADDR_UID_UNIT    0x00EDU   /* u8  map 0x36: new Modbus unit 1..247, 0 = keep (Modbus 0x811E low byte) */
 #define RBAMP_STD_REG_FW_VER           0x0114U   /* u32  running image version (from its header), e.g */
 #define RBAMP_STD_REG_ACTIVE_BANK      0x0118U   /* u32  running bank base address (E18) */
-#define RBAMP_STD_REG_LOST_FRAMES      0x012EU   /* u32  ADC frames that never arrived since boot (energy gap-compensated) */
+#define RBAMP_STD_REG_LOST_FRAMES      0x012EU   /* u32  measurement frames that never arrived since boot (energy gap-compensated) */
 #define RBAMP_STD_REG_BOARD_ID         0x017CU   /* u32  map 0x36: board id of the running image = 0x42440000 | N_ADC_CH<<8 | VARIANT (e.g */
 #define RBAMP_STD_REG_RING_DROP        0x0106U   /* u16  acq ring-full drops */
 #define RBAMP_STD_REG_WIN_NSAMP        0x0110U   /* u16  samples in last finalized window (whole mains cycles nearest 100 ms when cycle-locked: ~5x period @50 Hz / 6x @60 Hz from fw 0x7C */
@@ -355,10 +355,10 @@
 #define RBAMP_STD_VARIANT_I6           0x0026U
 #define RBAMP_STD_VARIANT_I7           0x0027U
 #define RBAMP_STD_VARIANT_U2I1         0x0041U
-#define RBAMP_STD_VARIANT_U2I2         0x0042U
+#define RBAMP_STD_VARIANT_SPLIT_PHASE  0x0042U
 #define RBAMP_STD_VARIANT_U2I3         0x0043U
-#define RBAMP_STD_VARIANT_U3I3         0x0063U
-#define RBAMP_STD_VARIANT_U3I6         0x0066U
+#define RBAMP_STD_VARIANT_3PH_3CH      0x0063U
+#define RBAMP_STD_VARIANT_3PH_6CH      0x0066U
 #define RBAMP_STD_SENSOR_UNSET         0x0000U
 #define RBAMP_STD_SENSOR_SCT013        0x0001U
 #define RBAMP_STD_DEV_ERR_OK           0x0000U   /* ERROR reg (0x0002) value */
@@ -425,87 +425,6 @@
 #define RBAMP_STD_HF_LTA_JUMP          0x0008U   /* HIST_REC.FLAGS bit 3 */
 #define RBAMP_STD_EVF_MAINT            0x0001U   /* EVENT_REC.FLAGS bit 0 */
 #define RBAMP_STD_ATTEST_MSG_TAG       "U3I3-ATT-1"   /* string constant */
-#define RBAMP_STD_MB_UNIT_ID_DEFAULT   0x0001U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_UNIT_ID_MIN       0x0001U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_UNIT_ID_MAX       0x00F7U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FC_READ_HOLDING   0x0003U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FC_READ_INPUT     0x0004U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FC_WRITE_SINGLE   0x0006U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FC_WRITE_MULTI    0x0010U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_EXCEPTIONS_ILLEGAL_FUNCTION 0x0001U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_EXCEPTIONS_ILLEGAL_ADDRESS 0x0002U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_EXCEPTIONS_ILLEGAL_VALUE 0x0003U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_EXCEPTIONS_DEVICE_FAILURE 0x0004U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_EXCEPTIONS_DEVICE_BUSY 0x0006U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_NATIVE_INPUT_BASE 0x6000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_NATIVE_HOLDING_BASE 0x8000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_NATIVE_MIRROR_BASE 0xA000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SDM_INPUT_BASE    0x0000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SDM_THD_DEMAND_VALUE 0x0000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SENTINEL_I16      0x8000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SENTINEL_I32      0x80000000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SENTINEL_U16      0xFFFFU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SEC_HOLDING_BASE  0x8400U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SEC_CHALLENGE_BASE 0x8440U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SEC_ATTDATA_BASE  0x8460U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_SEC_DIAG_BASE     0x8470U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_GROUP_ENERGY_BASE 0x6B20U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_GROUP_ENERGY_HIGH_BASE 0x6C80U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_E_MWH_INPUT       0x6B14U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_E_UWH_INPUT       0x6BB0U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_E_UVARH_INPUT     0x6BACU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_GROUP_ENERGY_UWH_BASE 0x6BC0U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_PHASE_SEQ_INPUT   0x6020U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_ADDR_UID_HOLDING  0x8118U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_BOARD_ID_HOLDING  0x831BU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_EVENT_HOLDING     0x8120U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_U3I3_INPUT_DISCOVERY_BASE 0x6019U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_U3I3_TIME_SET_HI  0x8100U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_U3I3_CMD_WINDOW_BASE 0x8110U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_LT_GEN_HOLDING    0x8140U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_LT_KEY_HOLDING    0x8142U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_LT_ADOPT_HOLDING  0x8144U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_HIST_QUERY_HOLDING 0x8160U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_HIST_REC_HOLDING  0x8180U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_MODBUS_ADDR_HOLDING 0x8000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_MB_BAUD_HOLDING 0x8001U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_MB_FRAME_HOLDING 0x8002U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_TX_DELAY_HOLDING 0x8003U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_WORD_ORDER_HOLDING 0x8004U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_TIME_AUTH_HOLDING 0x8005U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_ENERGY_PERSIST_HOLDING 0x8006U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_VIRTUAL_IDS_HOLDING 0x8007U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_CLASS_HOLDING 0x8008U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_CT_MODEL_HOLDING 0x8009U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_TZ_OFFSET_HOLDING 0x800AU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_LED_HOLDING   0x800BU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_CFG_START_UA_HOLDING 0x800CU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_STATUS_HOLDING 0x8300U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_ACTIVE_BANK_HOLDING 0x8301U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_PAGE_IDX_HOLDING 0x8302U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_BANK_SIZE_HOLDING 0x8304U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_ACTIVE_HOLDING 0x8306U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_STAGED_VERSION_HOLDING 0x8308U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_LAST_EXCEPTION_HOLDING 0x830AU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_PCRC_EXP_HOLDING 0x8310U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_PCRC_RX_HOLDING 0x8312U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_OTA_DIAG_HOLDING 0x8314U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_VER_HOLDING    0x8315U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_SWAP_PENDING_HOLDING 0x8317U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_KEYID_HOLDING  0x8319U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_NT_WINDOW_HOLDING 0x8320U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_NT_AIN_HOLDING    0x8328U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_FW_PAYLOAD_HOLDING 0x8380U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_GROUPS_MAX        0x0010U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_UNLOCK_WINDOW_S   0x000AU   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESPONSE_MAX_MS   0x0014U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESERVE_DTSU666_INPUT_BASE 0x2000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESERVE_DTSU666_HOLDING_BASE 0x2000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESERVE_DTSU666_SIZE 0x3000U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESERVE_SUNSPEC_BASE 0x9C40U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESERVE_SUNSPEC_SIZE 0x00C8U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESERVE_TARIFF_HOLDING_BASE 0x8500U   /* modbus (RBAMP_STD_MB_*) */
-#define RBAMP_STD_MB_RESERVE_TARIFF_HOLDING_SIZE 0x0100U   /* modbus (RBAMP_STD_MB_*) */
 
 /* Block accessors: addr of field F in block B index i = RBAMP_STD_B(i) + RBAMP_STD_B_F */
 #define RBAMP_STD_VOLTAGE(v)  (RBAMP_STD_VOLTAGE_BASE + (uint16_t)((v) * RBAMP_STD_VOLTAGE_STRIDE))
