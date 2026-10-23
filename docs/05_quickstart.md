@@ -147,7 +147,7 @@ void app_main(void) {
     ESP_ERROR_CHECK(rbamp_new(bus, 0x50, &dev));    /* default address 0x50 */
 
     /* rbamp_begin blocks while it tries to reach the slave;
-     * it runs a primer-LATCH and a valid-check, ~250 ms. */
+     * it runs a primer-snapshot and a valid-check, ~250 ms. */
     while (rbamp_begin(dev) != ESP_OK) {
         ESP_LOGE(TAG, "rbAmp not responding — check wiring and power");
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -253,7 +253,7 @@ E_Wh += avg_P × master_dt_s / 3600
 
 where `master_dt_s` is the number of seconds between two successful calls to
 `rbamp_read_period_snapshot()`. The component keeps the timestamp of the last
-latch in the handle and computes the difference itself.
+snapshot in the handle and computes the difference itself.
 
 A minimal template for periodic accounting (once a minute):
 
@@ -289,7 +289,7 @@ void app_main(void) {
 What `rbamp_read_period_snapshot()` does under the hood (with
 `skip_latch=false`):
 
-1. Sends the module the period-latch command (`CMD_LATCH_PERIOD`).
+1. Sends the module the period-snapshot command (`CMD_LATCH_PERIOD`).
 2. Waits `settle_ms` (50 ms by default) while the module prepares the snapshot.
 3. Checks the ready flag; reads the average/peak power.
 4. Updates the internal Wh counter: `+= avg_p × master_dt_s / 3600`

@@ -42,7 +42,7 @@ The API follows standard ESP-IDF patterns:
   the line and routes every call. Functions that exist on only one line
   return `ESP_ERR_NOT_SUPPORTED` on the other (see
   [`rbamp_line_t`](#rbamp_line_t) and [STD line](#std-line)).
-- **Commands are not retried.** A command write (latch, reset, save, ...)
+- **Commands are not retried.** A command write (snapshot, reset, save, ...)
   is never repeated after a transport error — a retry could deliver the
   opcode twice. Data-register reads and writes keep the NACK retry.
 - **Error mapping** used across the API: `ESP_ERR_NOT_SUPPORTED` — the
@@ -139,7 +139,7 @@ and every later call is routed internally. Query it with
 `rbamp_line(dev)`. Calls that have no counterpart on the detected
 line return `ESP_ERR_NOT_SUPPORTED` — never a wrong-register read.
 What only the STD line offers (reactive / apparent power, THD, signed
-energy counters, latch banks, history) is collected in
+energy counters, snapshot banks, history) is collected in
 [STD line](#std-line).
 
 ### `rbamp_snapshot_t`
@@ -215,7 +215,7 @@ typedef struct {
     float    avg_p_total;       /* W — average active power summed over ALL channels (signed) */
     double   wh_net;            /* Wh — net energy of this period as the library accounted it (signed) */
     bool     module_restarted;  /* the module rebooted inside this period */
-    uint32_t module_window_ms;  /* ms — the module's own length of the latched window (0 on STD) */
+    uint32_t module_window_ms;  /* ms — the module's own length of the closed window (0 on STD) */
     uint16_t module_commit_ms;  /* ms — length of one module commit as inferred: 100 or 200 (0 on STD) */
     uint32_t module_uptime_s;   /* s — module uptime read with the snapshot (0 if not published) */
     bool     window_from_boot;  /* the window started at the module's boot */
@@ -225,15 +225,15 @@ typedef struct {
 
 | Field | Notes |
 |---|---|
-| `avg_p[3]` | Channels 0–2 only. On a UI5/UI7 the module latches average power for **all** channels atomically; read channels 3+ with `rbamp_read_period_avg_power()` and their Wh with `rbamp_energy_wh()` (the accumulator integrates every channel). |
+| `avg_p[3]` | Channels 0–2 only. On a UI5/UI7 the module takes its average-power snapshot for **all** channels atomically; read channels 3+ with `rbamp_read_period_avg_power()` and their Wh with `rbamp_energy_wh()` (the accumulator integrates every channel). |
 | `max_p` | A global peak, taken on channel 0. |
 | `latch_ms` | Diagnostic only; it may read short under load. The energy-integration window is `master_dt_ms` or `module_window_ms`. |
 | `master_dt_ms` | The window the library integrates energy over: the master's own `esp_timer` time between two consecutive **consumed** reads. |
 | `avg_p_total`, `wh_net` | The period summed over all channels. `wh_net` is average power × `master_dt_ms`, or — on modules that keep energy on the device — the module's own counter difference. |
-| `module_window_ms`, `module_commit_ms` | The module's measure of the latched window: commits counted on the module's measurement clock, **100 ms each on current firmware and 200 ms on firmware older than v1.2** — the library infers which from the same snapshot. Normally cross-checks `master_dt_ms`. Both are 0 on the STD line. |
+| `module_window_ms`, `module_commit_ms` | The module's measure of the closed window: commits counted on the module's measurement clock, **100 ms each on current firmware and 200 ms on firmware older than v1.2** — the library infers which from the same snapshot. Normally cross-checks `master_dt_ms`. Both are 0 on the STD line. |
 | `module_restarted` | The module rebooted inside the period. Its RAM settings (clock, event mask, thresholds, digest fields) need re-applying — the library re-applies those it owns. On a BASIC module it is set on the first snapshot after `rbamp_begin_resume()` when the window started at the module's boot. |
-| `module_uptime_s`, `window_from_boot` | `window_from_boot` is true when the latched window started at the module's boot (a restart, or the first latch since boot). Always false when the firmware does not publish uptime (`module_uptime_s` = 0). |
-| `window_long` | The window exceeds 6 h: the module's average loses precision over very long windows — latch more often. |
+| `module_uptime_s`, `window_from_boot` | `window_from_boot` is true when the snapshot window started at the module's boot (a restart, or the first snapshot since boot). Always false when the firmware does not publish uptime (`module_uptime_s` = 0). |
+| `window_long` | The window exceeds 6 h: the module's average loses precision over very long windows — take snapshots more often. |
 
 > ⚠ **`latch_ms` is diagnostic, not for energy.** It is the module's own
 > measure of the period and it may read short under load. **Do not use
@@ -249,7 +249,7 @@ Bits of the sticky, write-1-to-clear `EVENT_FLAGS` byte (see
 
 | Enum | Meaning |
 |---|---|
-| `RBAMP_EVENT_PERIOD_READY` | A period snapshot latched |
+| `RBAMP_EVENT_PERIOD_READY` | A period snapshot was taken |
 | `RBAMP_EVENT_THRESH_I` | Current threshold crossed |
 | `RBAMP_EVENT_THRESH_P` | Power threshold crossed |
 | `RBAMP_EVENT_ERROR` | Durable error indicator (see [Error model](#error-model-v13)) |
@@ -391,7 +391,7 @@ esp_err_t rbamp_begin(rbamp_handle_t dev);
 ```
 
 Probes the device, detects the module line, adopts the channel count
-and variant, and primes LATCH.
+and variant, and primes a snapshot.
 
 Sequence:
 
@@ -410,7 +410,7 @@ Sequence:
    this step.)
 6. Save `esp_timer_get_time()` for subsequent energy integration.
 
-Idempotent but **not free**: each call issues one primer LATCH.
+Idempotent but **not free**: each call issues one primer snapshot.
 
 **Returns**: `ESP_OK` on success; the error codes above otherwise.
 
@@ -420,11 +420,11 @@ Idempotent but **not free**: each call issues one primer LATCH.
 esp_err_t rbamp_begin_resume(rbamp_handle_t dev);
 ```
 
-`rbamp_begin()` **without the primer latch** — it keeps the window
+`rbamp_begin()` **without the primer snapshot** — it keeps the window
 the module accumulated while the master was away. A BASIC module keeps
-averaging until the next latch, so after a master reboot or outage the
+averaging until the next snapshot, so after a master reboot or outage the
 module still holds the whole window since the last consumed snapshot;
-`rbamp_begin()` would latch and discard it, this call does not.
+`rbamp_begin()` would take a snapshot and discard it, this call does not.
 
 The first consumed `rbamp_read_period_snapshot()` after it integrates
 over the module's own window (`module_window_ms`):
@@ -536,9 +536,9 @@ esp_err_t rbamp_read_frequency    (rbamp_handle_t dev,                float *out
 | Function | Return value | Notes |
 |---|---|---|
 | `rbamp_read_voltage` | RMS voltage, V | `phase = 0` on the BASIC line |
-| `rbamp_read_voltage_peak` | Peak voltage, V | Reads 0 on STD module map 0x34 and earlier — use a latch bank's `max_u` / `min_u` |
+| `rbamp_read_voltage_peak` | Peak voltage, V | Reads 0 on STD module map 0x34 and earlier — use a snapshot bank's `max_u` / `min_u` |
 | `rbamp_read_current` | RMS current on the channel, A | `ch` < `rbamp_channels(dev)`; channels 3+ (UI5 / UI7) are routed through the channel window transparently |
-| `rbamp_read_current_peak` | Peak current on the channel, A | Reads 0 on STD module map 0x34 and earlier — use a latch bank's `max_i` |
+| `rbamp_read_current_peak` | Peak current on the channel, A | Reads 0 on STD module map 0x34 and earlier — use a snapshot bank's `max_i` |
 | `rbamp_read_power` | Active power, W **(signed)** | Negative = export (PV / bidirectional installs) |
 | `rbamp_read_power_factor` | Power factor | Dimensionless, −1..+1 |
 | `rbamp_read_frequency` | Mains frequency, Hz | 50.0 or 60.0 on a healthy grid. STD: a module value of 0 (no mains) returns `ESP_ERR_INVALID_RESPONSE` with `*out = NaN` |
@@ -752,7 +752,7 @@ encapsulates the entire sequence.
 esp_err_t rbamp_is_period_valid(rbamp_handle_t dev, bool *out);
 ```
 
-Reads the latch-ready bit. `*out = true` if the last snapshot is
+Reads the snapshot-ready bit. `*out = true` if the last snapshot is
 fresh.
 
 ### `rbamp_read_period_avg_power`
@@ -762,7 +762,7 @@ esp_err_t rbamp_read_period_avg_power(rbamp_handle_t dev,
                                       uint8_t ch, float *out);
 ```
 
-Average active power on the channel over the latched period. Must be
+Average active power on the channel over the snapshot period. Must be
 called after `rbamp_latch_period()` + a 50 ms settle + a valid
 check.
 
@@ -772,7 +772,7 @@ check.
 esp_err_t rbamp_read_period_max_power(rbamp_handle_t dev, float *out);
 ```
 
-Peak instantaneous power on channel 0 over the latched period.
+Peak instantaneous power on channel 0 over the snapshot period.
 `ch=0` only on v1 firmware.
 
 ### `rbamp_read_period_latch_ms`
@@ -800,12 +800,12 @@ esp_err_t rbamp_read_period_snapshot(rbamp_handle_t dev,
 sequence under the hood:
 
 1. If `skip_latch == true` — skip the LATCH write (used after a
-   manual series of LATCH commands or a broadcast latch for
+   manual series of snapshot commands or a broadcast snapshot for
    multi-module sync).
 2. Otherwise — write `CMD_LATCH_PERIOD`.
 3. Capture `esp_timer_get_time()` to compute `master_dt_ms`.
 4. `vTaskDelay(pdMS_TO_TICKS(settle_ms))` — 50 ms by default.
-5. Check the latch-ready flag. If it is 0 — set
+5. Check the snapshot-ready flag. If it is 0 — set
    `ESP_ERR_INVALID_RESPONSE` and record the timestamp (so the next
    snapshot does not double-count `dt`).
 6. Read `avg_p[0..channels-1]` + `max_p` + `latch_ms`.
@@ -816,13 +816,13 @@ sequence under the hood:
 | Parameter | Description |
 |---|---|
 | `out` | Output structure. |
-| `settle_ms` | Wait after LATCH (50 recommended). |
+| `settle_ms` | Wait after the snapshot (50 recommended). |
 | `skip_latch` | If `true` — do not write LATCH, only read (for the multi-module pattern). |
 
 **Returns**: `ESP_OK` if `out->valid == true`;
 `ESP_ERR_INVALID_RESPONSE` if the snapshot is stale (on stale, energy
 is **not** integrated and the anchor is held); `ESP_ERR_NOT_SUPPORTED`
-on an STD module that offers neither latch banks nor counters; the
+on an STD module that offers neither snapshot banks nor counters; the
 `esp_err_t` from bus operations otherwise. See
 [Period calls on the STD line](#period-calls-on-the-std-line) for the
 STD behaviour.
@@ -832,7 +832,7 @@ between successive **consumed** reads. After
 [`rbamp_begin_resume()`](#rbamp_begin_resume) the first consumed
 snapshot integrates over the module's own window instead.
 
-> **Recommended cadence.** Between latch calls: **60 s is
+> **Recommended cadence.** Between snapshot calls: **60 s is
 > comfortable, 30 s is marginal, < 10 s guarantees stale reads**. The
 > firmware integrates the periodic accumulator internally; calling
 > `rbamp_read_period_snapshot()` more often than the firmware can
@@ -859,8 +859,8 @@ depends on what the STD module offers
 
 | `period_source` | Behaviour of `rbamp_read_period_snapshot()` |
 |---|---|
-| `RBAMP_STD_PERIOD_LATCH` | The module has latch banks. The library uses **bank 0** (armed by `rbamp_begin()`): it latches, waits at least 300 ms regardless of a smaller `settle_ms` (the module takes the latch at its next measurement-window boundary), reads the bank and converts it to energy over `master_dt_ms`. With `skip_latch` the caller owns the timing: latch, wait ≥ 300 ms, then read. Keep bit 0 set in `rbamp_std_arm_banks()`. |
-| `RBAMP_STD_PERIOD_COUNTERS` | No latch banks, but persisted life-time counters. **No latch is sent** and `settle_ms` / `skip_latch` are ignored: the call reads the counters and reports the difference since the previous consumed read in `avg_p_total` / `wh_net`. Nothing is lost across a module restart (`module_restarted` flags it). |
+| `RBAMP_STD_PERIOD_LATCH` | The module has snapshot banks. The library uses **bank 0** (armed by `rbamp_begin()`): it latches, waits at least 300 ms regardless of a smaller `settle_ms` (the module takes the snapshot at its next measurement-window boundary), reads the bank and converts it to energy over `master_dt_ms`. With `skip_latch` the caller owns the timing: latch, wait ≥ 300 ms, then read. Keep bit 0 set in `rbamp_std_arm_banks()`. |
+| `RBAMP_STD_PERIOD_COUNTERS` | No snapshot banks, but persisted life-time counters. **No latch is sent** and `settle_ms` / `skip_latch` are ignored: the call reads the counters and reports the difference since the previous consumed read in `avg_p_total` / `wh_net`. Nothing is lost across a module restart (`module_restarted` flags it). |
 | `RBAMP_STD_PERIOD_NONE` | Neither. **The period calls return `ESP_ERR_NOT_SUPPORTED`** instead of silently reporting an invalid period. |
 
 For the counter path: `avg_p[]` holds the period for a single-channel
@@ -883,7 +883,7 @@ consumed period's average for single-channel counter modules and
 counter modules; `rbamp_read_period_snapshot()` returns
 `ESP_ERR_INVALID_RESPONSE` when bank 0 reports no elapsed window — if a
 module reset cleared the bank's arm mask, the library re-arms bank 0,
-primer-latches and restarts the clock anchor (that one window is not
+takes a primer snapshot and restarts the clock anchor (that one window is not
 integrated, the next is whole again).
 
 ### Inline helper
@@ -929,7 +929,7 @@ means net export.
 is signed — negative means net export — and `0` if `ch` is out of range
 or energy is disabled.
 
-**STD modules without latch banks** (counter path): the total is the
+**STD modules without snapshot banks** (counter path): the total is the
 sum of the module's own counter differences — exact, nothing is
 integrated on the host. Per-channel values come from the module's
 per-channel counters where it publishes them, are `NaN` on
@@ -1376,7 +1376,7 @@ a reboot + re-read. On the STD line it reads the channel's map entry.
 The Fleet API is the library's primary high-level surface. It
 manages a collection of modules on a shared I²C bus: discovery,
 provisioning, poll aggregation, error aggregation, synchronous
-latches.
+snapshots.
 
 All fleet functions are thread-safe via an internal mutex;
 concurrent calls from different tasks are serialized. A single owner
@@ -1584,7 +1584,7 @@ esp_err_t rbamp_fleet_check_sync(rbamp_fleet_t fleet,
 ```
 
 For tight snapshot synchrony (skew < 1 ms across the whole
-fleet) an I²C General-Call broadcast latch is used.
+fleet) an I²C General-Call broadcast snapshot is used.
 
 1. `_enable_gc_all` sets `FLEET_CONFIG.bit0` + `GROUP_ID` on all
    modules in the fleet and issues `CMD_SAVE_USER_CONFIG` on each
@@ -1594,7 +1594,7 @@ fleet) an I²C General-Call broadcast latch is used.
    number of modules for which enable succeeded.
 2. `_gclatch` sends the GC frame `A5 27 group tick_lo tick_hi` to
    address `0x00` — all modules with GC enabled and a matching
-   `group` instantly perform `LATCH_PERIOD`. `settle_ms` is the pause
+   `group` instantly take the snapshot (`LATCH_PERIOD`). `settle_ms` is the pause
    after the frame (typically 50 ms) before verification.
 3. `_check_sync` reads `GC_TICK (0x59)` on each module into
    `rbamp_fleet_sync_t status[status_cap]`. The per-module result:
@@ -1631,7 +1631,7 @@ esp_err_t rbamp_read_fleet_config(rbamp_handle_t dev, uint8_t *out);
 ```
 
 `enable_gc(dev, true)` writes `1` to `FLEET_CONFIG.bit0 (0x27)` — the
-module will start accepting GC latches after the next
+module will start accepting GC snapshots after the next
 `CMD_SAVE_USER_CONFIG` + reset. `enable_gc(dev, false)` mirrors this
 by clearing the bit (the module stops accepting GC after reset).
 `read_fleet_config` returns the current config byte — useful for
@@ -2043,14 +2043,14 @@ esp_err_t rbamp_broadcast_latch(i2c_master_bus_handle_t bus,
 On v1.3 firmware (`REG_VERSION = 0x04`) this is the canonical fleet-sync
 path once General-Call has been enabled fleet-wide via
 `rbamp_fleet_enable_gc_all()`. The 5-byte General-Call frame
-`A5 27 <group> <tick_lo> <tick_hi>` latches every module in the matching
+`A5 27 <group> <tick_lo> <tick_hi>` makes every module take its snapshot in the matching
 group at the same wire moment, giving tight synchronization
 between sub-meters. The function takes only the bus: it transmits the
 frame (`ESP_OK` means the host driver did not error — General Call is
 write-only, no module ACKs; `ESP_ERR_INVALID_ARG` on a `NULL` bus).
 Modules without General-Call support, or with it left disabled, simply
 ignore the frame — verify with the per-module witness (below) and use the
-sequential fallback if they did not latch.
+sequential fallback if they did not take the snapshot.
 `rbamp_broadcast_latch_group(bus, group, tick, timeout_ms)` is the same
 with an explicit group filter and fleet tick.
 
@@ -2070,7 +2070,7 @@ chapters works unchanged on both lines** (`rbamp_read_current`,
 the configuration calls, …). The functions in this chapter are the
 STD-only additions: whole channels in one burst, the quantities that
 only this line measures (reactive / apparent power, THD, signed energy
-counters), latch banks, the module clock, history, health, firmware
+counters), snapshot banks, the module clock, history, health, firmware
 update. **Every `rbamp_std_*` function returns `ESP_ERR_NOT_SUPPORTED`
 on a BASIC handle.**
 
@@ -2132,12 +2132,12 @@ typedef enum {
 Decided by `rbamp_begin()` from the module's capabilities and exposed in
 `rbamp_std_info_t.period_source`:
 
-- **`LATCH`** — the module has latch banks. A period is latch-to-latch
+- **`LATCH`** — the module has snapshot banks. A period is snapshot-to-snapshot
   on bank 0; averages and per-channel energy come from the bank. See
-  [Latch banks](#latch-banks).
-- **`COUNTERS`** — no latch banks, but persisted life-time counters. A
+  [Snapshot banks](#snapshot-banks).
+- **`COUNTERS`** — no snapshot banks, but persisted life-time counters. A
   period is the **difference of two counter readings**, taken on the
-  master's schedule; there is no latch command, nothing to arm, and
+  master's schedule; there is no snapshot command, nothing to arm, and
   nothing is lost across a module restart. See
   [Life-time energy counters](#life-time-energy-counters).
 - **`NONE`** — neither: the period and energy calls return
@@ -2169,7 +2169,7 @@ typedef struct {
 
 | Function | Description |
 |---|---|
-| `rbamp_std_read_channel(dev, ch, &c)` | One current channel block (I / P / Q / S / PF / peak / energy accumulators / harmonics) in a single burst; `ch` is `0..rbamp_channels(dev)-1`. Fields are as coherent as the module publishes them (per publish window); for a strictly atomic multi-field snapshot use the period latch. A field that trips a sanity bound is `NaN` with its `RBAMP_FIELD_*` bit in `implausible`. |
+| `rbamp_std_read_channel(dev, ch, &c)` | One current channel block (I / P / Q / S / PF / peak / energy accumulators / harmonics) in a single burst; `ch` is `0..rbamp_channels(dev)-1`. Fields are as coherent as the module publishes them (per publish window); for a strictly atomic multi-field snapshot use the period snapshot. A field that trips a sanity bound is `NaN` with its `RBAMP_FIELD_*` bit in `implausible`. |
 | `rbamp_std_read_totals(dev, k, &c)` | An aggregate block: `k = 0` the grand total (sum of all current channels), `k = 1..3` the per-phase totals A/B/C (multi-phase modules only). Per-phase totals are published from map 0x36 — on a single-phase module `k = 1` equals channel 0 and `k = 2/3` read 0; below 0x36 they return `ESP_ERR_NOT_SUPPORTED` (`k = 0` always works). The energy fields (`e_import_mws` / `e_export_mws`) are **not populated** for aggregate blocks and read 0 — energy comes from the persistent counters (`rbamp_std_read_energy`). |
 | `rbamp_std_read_voltage(dev, v, &u)` | One voltage channel block (RMS / peak / THD / phase angle) in one burst; `v` is `0..n_voltage-1`. `angle_deg` / `angle_valid` are published by three-phase modules with module image version `0x0001007A` or newer; otherwise `angle_valid` is false and the rest of the block is unaffected. On a forward-sequence three-phase module input 1 reads about −120° and input 2 about +120°. |
 | `rbamp_std_read_phase_seq(dev, &seq)` | The order of the voltage inputs, derived by the module from the angles: `RBAMP_STD_PHASE_SEQ_NA` (fewer than three inputs, or an input too low), `_FORWARD` (L1-L2-L3), `_REVERSE` (L1-L3-L2), `_ABNORMAL` (no 120° pattern, e.g. two inputs wired to the same phase). Returns `ESP_ERR_NOT_SUPPORTED` (and `*seq = NA`) on module image version older than `0x0001007A`, with no bus traffic. |
@@ -2178,7 +2178,7 @@ typedef struct {
 > enabled — see [Configuration](#configuration). `e_import_mws` /
 > `e_export_mws` are the module's raw accumulators in mW·samples; the
 > module has no clock, so converting to Wh needs the sample count and
-> your own period timing (use the latch path or the life-time counters).
+> your own period timing (use the snapshot path or the life-time counters).
 > For monitoring, integrate `p` over your poll interval.
 
 `rbamp_read_all()` on an STD module reads the voltage block and each
@@ -2187,7 +2187,7 @@ channel block whole (one transaction each) instead of field by field.
 `ESP_ERR_INVALID_RESPONSE` with `*out = NaN` when the module publishes 0
 (no mains); `rbamp_read_all()` then raises `RBAMP_FIELD_FREQUENCY`.
 `rbamp_read_voltage_peak()` / `rbamp_read_current_peak()` read 0 on module
-map 0x34 and earlier — use a latch bank's `max_u` / `min_u` / `max_i` for
+map 0x34 and earlier — use a snapshot bank's `max_u` / `min_u` / `max_i` for
 the peak over a period.
 
 ### Health
@@ -2321,14 +2321,14 @@ Import and export are separate magnitudes. A period's energy is the
 | `rbamp_std_read_energy(dev, &e)` | Read the counters. Each decoded block is one transaction (the module serves it from a coherent snapshot). `ESP_ERR_NOT_SUPPORTED` unless the module reports the on-device-energy capability; `ESP_ERR_INVALID_RESPONSE` if the block reads as unprogrammed. |
 | `rbamp_std_energy_delta(&prev, &now, &delta, &restarted)` | Energy between two readings with the continuity rules applied. `delta` = `now − prev` per counter (import / export magnitudes, net, reactive; `generation` and `uptime_s` copied from `now`); `restarted` is true if `uptime_s` went down. Either output may be `NULL`. A counter that went down is clamped to a 0 difference, per channel too and at every resolution; every net field is the import difference minus the export difference. Per-channel differences are produced when both readings carry the same channel count, otherwise `delta->channels` is 0. `ESP_ERR_INVALID_STATE` if the generation differs — **do not account that interval; start again from `now`**. |
 
-### Latch banks
+### Snapshot banks
 
 The module keeps 8 independent banks (only on modules with the
-multi-latch capability, `period_source == RBAMP_STD_PERIOD_LATCH`). A
+multi-snapshot capability, `period_source == RBAMP_STD_PERIOD_LATCH`). A
 bank accumulates while its bit is set in the **arm mask**;
 `rbamp_std_latch()` snapshots **and resets** it at the module's next
 measurement-window boundary. A period is therefore the interval between
-two latches of the same bank, measured by the **master's** clock (the
+two snapshots of the same bank, measured by the **master's** clock (the
 module has none). **Bank 0** is also what `rbamp_read_period_snapshot()`
 and `rbamp_energy_wh()` use. The three bank calls return
 `ESP_ERR_NOT_SUPPORTED` without bus traffic on any other module — use
@@ -2338,7 +2338,7 @@ Typical use: arm the banks once, then per bank on your own schedule
 `rbamp_std_latch(bank)` → wait **≥ 300 ms** (a safe upper bound of one
 measurement window on every image) → `rbamp_std_read_latch()` →
 `rbamp_std_latch_wh()` with the master-measured dt since the previous
-latch.
+snapshot.
 
 ```c
 typedef struct {
@@ -2349,7 +2349,7 @@ typedef struct {
     uint32_t win_count;                 /* measurement windows in the period (0 = not armed / nothing elapsed) */
     uint8_t  channels;                  /* valid entries in the per-channel arrays */
     uint8_t  bank;
-    bool     valid;                     /* the bank has EVER been latched (not a freshness signal) */
+    bool     valid;                     /* the bank has EVER been snapshotted (not a freshness signal) */
     float    p_avg_ch[RBAMP_MAX_CHANNELS];
     int64_t  e_import_ch_mws[RBAMP_MAX_CHANNELS], e_export_ch_mws[RBAMP_MAX_CHANNELS];
 } rbamp_std_latch_t;
@@ -2357,10 +2357,10 @@ typedef struct {
 
 | Function | Description |
 |---|---|
-| `rbamp_std_arm_banks(dev, mask)` | Set the accumulate mask: bit *b* = bank *b* accumulates (newly armed banks start clean; disarmed banks freeze and keep their last snapshot). **Bit 0 must stay set** if you use `rbamp_read_period_snapshot()`. The mask is **RAM on the module**: any module reset clears it, and a latch of an unarmed bank returns an empty snapshot. The library re-arms bank 0 by itself (in `rbamp_begin()`, after its own resets, and when a period snapshot comes back empty). For your own banks `rbamp_std_read_latch()` detects the lost arm, re-arms and primer-latches. |
+| `rbamp_std_arm_banks(dev, mask)` | Set the accumulate mask: bit *b* = bank *b* accumulates (newly armed banks start clean; disarmed banks freeze and keep their last snapshot). **Bit 0 must stay set** if you use `rbamp_read_period_snapshot()`. The mask is **RAM on the module**: any module reset clears it, and snapshotting an unarmed bank returns an empty snapshot. The library re-arms bank 0 by itself (in `rbamp_begin()`, after its own resets, and when a period snapshot comes back empty). For your own banks `rbamp_std_read_latch()` detects the lost arm, re-arms and takes a primer snapshot. |
 | `rbamp_std_latch(dev, bank)` | Request snapshot + reset of `bank` at the next window boundary. **Does not wait** — read it ≥ 300 ms later. |
 | `rbamp_std_read_latch(dev, bank, &l)` | Read the last snapshot of `bank` (one burst: totals + per-channel energy for every populated channel). `ESP_ERR_INVALID_RESPONSE` if the module has never latched this bank (other fields are zeroed). `ESP_ERR_INVALID_STATE` if the snapshot is empty because the bank was disarmed by a module reset — the library has re-armed and primer-latched it: **drop this period and restart your dt anchor**. Read a bank at least one measurement window after latching it; `win_count == 0` means it was not armed or no window elapsed. |
-| `rbamp_std_latch_wh(&l, dt_ms, ch, &wh_import, &wh_export)` | Convert a snapshot's energy buckets to Wh over the master-measured period `dt_ms` (the master wall-clock between the previous and this latch of the bank). `ch` is a channel index or `RBAMP_STD_TOTAL` (`0xFF`) for the bank totals. Wh = E[mW·samples] / 1000 / 3600 × (dt / nsamp): the sample count and the master's dt normalise the result. Import ≥ 0, export ≤ 0; either output may be `NULL`. `ESP_ERR_INVALID_STATE` if `nsamp` is 0. |
+| `rbamp_std_latch_wh(&l, dt_ms, ch, &wh_import, &wh_export)` | Convert a snapshot's energy buckets to Wh over the master-measured period `dt_ms` (the master wall-clock between the previous and this snapshot of the bank). `ch` is a channel index or `RBAMP_STD_TOTAL` (`0xFF`) for the bank totals. Wh = E[mW·samples] / 1000 / 3600 × (dt / nsamp): the sample count and the master's dt normalise the result. Import ≥ 0, export ≤ 0; either output may be `NULL`. `ESP_ERR_INVALID_STATE` if `nsamp` is 0. |
 
 ### Clock, commands and service
 
@@ -2594,8 +2594,8 @@ codes and their semantics in the rbamp context:
 | `ESP_FAIL` (-1) | The I²C transaction failed after retries | wiring, power, bus speed — section "The module does not respond over I²C" in [10 · Troubleshooting](10_troubleshooting.md) |
 | `ESP_ERR_INVALID_ARG` (0x102) | Invalid argument: `dev == NULL`, `channel` or `phase` out of range, an unrecognised `cls`, a value the module rejects (unknown CT model, starting current outside the accepted set, a clock before 2020) | check the call arguments |
 | `ESP_ERR_TIMEOUT` (0x107) | `rbamp_wait_ready` / `rbamp_wait_data_ready` expired; the `rbamp_commit_address_change` window (5 s) expired; an STD command or OTA state did not complete | check responsiveness via `rbamp_probe()` |
-| `ESP_ERR_INVALID_STATE` (0x103) | A precondition or call sequence is wrong: `set_ct_model*` before `set_sensor_class`; the module is class 2 / 3 (calibrated with its sensor — use `rbamp_set_ct_model_ch_force()` for service); the module rejected the `(class, model)` pair; address commit not armed; STD latch bank re-armed after a module reset (drop this period); STD counter generation changed (`rbamp_std_energy_delta`); OTA session not open | section "`rbamp_set_*` returns `ESP_ERR_INVALID_STATE`" in [10 · Troubleshooting](10_troubleshooting.md) |
-| `ESP_ERR_NOT_SUPPORTED` (0x106) | The function or feature does not exist on this line / firmware / module: any `rbamp_std_*` call on a BASIC handle, reactive / apparent power on BASIC, `rbamp_read_digest` on STD or without the digest capability, period calls on an STD module with neither latch banks nor counters, `rbamp_factory_reset` on STD, a register-map version too old, OTA without the capability | check `rbamp_line(dev)`, `rbamp_std_info()` and `rbamp_variant(dev)` |
+| `ESP_ERR_INVALID_STATE` (0x103) | A precondition or call sequence is wrong: `set_ct_model*` before `set_sensor_class`; the module is class 2 / 3 (calibrated with its sensor — use `rbamp_set_ct_model_ch_force()` for service); the module rejected the `(class, model)` pair; address commit not armed; STD snapshot bank re-armed after a module reset (drop this period); STD counter generation changed (`rbamp_std_energy_delta`); OTA session not open | section "`rbamp_set_*` returns `ESP_ERR_INVALID_STATE`" in [10 · Troubleshooting](10_troubleshooting.md) |
+| `ESP_ERR_NOT_SUPPORTED` (0x106) | The function or feature does not exist on this line / firmware / module: any `rbamp_std_*` call on a BASIC handle, reactive / apparent power on BASIC, `rbamp_read_digest` on STD or without the digest capability, period calls on an STD module with neither snapshot banks nor counters, `rbamp_factory_reset` on STD, a register-map version too old, OTA without the capability | check `rbamp_line(dev)`, `rbamp_std_info()` and `rbamp_variant(dev)` |
 | `ESP_ERR_NOT_FOUND` | Nothing present: `rbamp_std_probe` — nothing acknowledges at the address; no such history / event record; no certificate or device key; address commit — nothing answers at the new address (the handle keeps the old one) | check wiring / address; walk `back` only up to `rbamp_std_hist_info().count` |
 | `ESP_ERR_INVALID_RESPONSE` (0x108) | Period snapshot stale (ready flag = 0) or a skipped period (STD counters re-anchored, bank re-armed); `REG_VERSION` = 0/0xFF on `rbamp_begin`; a float failed the sanity filter; STD mains frequency 0 (no mains); `rbamp_std_probe` — something answers that is not an STD module | section "Period snapshots are always stale" / "Cannot exit rbamp_begin" in [10 · Troubleshooting](10_troubleshooting.md) |
 | `ESP_ERR_NO_MEM` (0x101) | Could not allocate memory for the handle; more than 4 DRDY lines / 8 handles per line | check the heap budget |
@@ -2734,7 +2734,7 @@ The authoritative SKU byte is register `0x55` (cached as `rbamp_variant()`):
 
 ### CAPABILITY (0x57/0x58, u16 LE) — feature-detect map
 
-A map of the device's capabilities (for example: voltage front-end present, General-Call latch supported, digest block, event flags, two-phase address change). The canonical way to feature-detect (instead of a version-numerical compare). Check individual capability flags through the helper functions; the set of flags grows with module firmware.
+A map of the device's capabilities (for example: voltage front-end present, General-Call snapshot supported, digest block, event flags, two-phase address change). The canonical way to feature-detect (instead of a version-numerical compare). Check individual capability flags through the helper functions; the set of flags grows with module firmware.
 
 **`has_voltage`** (without reading HW_VARIANT):
 
@@ -2754,7 +2754,7 @@ Both options are equivalent.
 
 ### Atomicity / read-freeze (B1)
 
-![The atomic period latch closing one period and opening the next with no gap and no overlap.](images/period-atomic-latch.png)
+![The atomic period snapshot closing one period and opening the next with no gap and no overlap.](images/period-atomic-latch.png)
 - **V03 float RMS block** (0x86+: U_RMS, U_PEAK, I_RMS, I_PEAK, P, PF, freq) — **read-freeze present**, the burst read is atomic.
 - **Digest block** (0x70-0x85) — read-freeze present.
 - **GC_TICK (0x59) / address-mirror (0x30) / CT-model mirrors (0x51-0x53)** — read-freeze **absent**; for a reliable read, use the **read-twice-agree** pattern (read twice, consider the value valid only if they match).
@@ -2767,7 +2767,7 @@ Both options are equivalent.
 
 `U_RMS`, `U_PEAK` on I1/I2/I3 read as `0`. They are valid only when the `CAPABILITY` voltage front-end flag is set. `REG_AC_FREQ` is ZC-sourced and available **on all variants** (including I*).
 
-### General-Call broadcast latch (multi-module synchronization)
+### General-Call broadcast snapshot (multi-module synchronization)
 
 **Opt-in per-module** via `bit0` of register `REG_FLEET_CONFIG (0x27)` — `GC_ENABLE`. **Default OFF.**
 Enabled via `CMD_SAVE_USER_CONFIG` + `CMD_RESET` (soft or hard). After a reset
@@ -2782,12 +2782,12 @@ addr=0x00 | A5 27 <group> <tick_lo> <tick_hi>
 - `<group>` — `0x00` = all-call, otherwise must match `REG_GROUP_ID` (0x28).
 - `<tick_lo/hi>` — a 16-bit period counter (master sync).
 
-The frame only latches the period; it never carries destructive opcodes.
+The frame only triggers the period snapshot; it never carries destructive opcodes.
 
 **Failure-mode detection (two-level, C.10 HW-confirmed)**:
 
 1. **GC-address NACK** (immediate, at the bus level): if GC is disabled across the **whole fleet** — `i2c_master_transmit` to `0x00` returns `ESP_FAIL` / `ESP_ERR_INVALID_STATE`. This is a **hard error, not a silent drop**. The lib treats the NACK as "GC not enabled" (it requires the enable+reset preconditions).
-2. **Per-module witness** (after settle): if no NACK occurred — the master reads `REG_V03_PERIOD_VALID (0x07)` on each expected slave: `1` = latch succeeded, `0` = GC disabled on this specific module, or the period is empty.
+2. **Per-module witness** (after settle): if no NACK occurred — the master reads `REG_V03_PERIOD_VALID (0x07)` on each expected slave: `1` = snapshot succeeded, `0` = GC disabled on this specific module, or the period is empty.
 
 ## Links
 
@@ -2831,7 +2831,7 @@ ESP_ERROR_CHECK(rbamp_read_voltage(dev, 0, &u_rms));
 ### Reading a period — without the component
 
 ```c
-// Latch + 50 ms settle + ready-flag check + burst-read avg_p
+// Snapshot + 50 ms settle + ready-flag check + burst-read avg_p
 uint8_t latch_cmd[2] = { 0x01, 0x27 };   // REG_COMMAND, CMD_LATCH_PERIOD
 ESP_ERROR_CHECK(i2c_master_transmit(slave, latch_cmd, 2, /*xfer_timeout_ms=*/100));
 int64_t t_latch_us = esp_timer_get_time();
@@ -2858,7 +2858,7 @@ rbamp_period_snapshot_t snap;
 if (rbamp_read_period_snapshot(dev, &snap, 50, false) == ESP_OK && snap.valid) {
     // snap.avg_p[0] is populated,
     // rbamp_energy_wh(dev, 0) has increased by avg_p × master_dt_ms/1000/3600,
-    // master_dt_ms = master wall-clock dt between latches (canonical for energy).
+    // master_dt_ms = master wall-clock dt between snapshots (canonical for energy).
     // snap.latch_ms (0xEC) — diagnostic module timer, NOT for energy.
 }
 ```
@@ -2866,7 +2866,7 @@ if (rbamp_read_period_snapshot(dev, &snap, 50, false) == ESP_OK && snap.valid) {
 Internally the component guarantees:
 
 - A 50 ms settle after `CMD_LATCH_PERIOD` (configurable via the
-  `settle_ms` parameter), correct snapshot reading (atomic latch on
+  `settle_ms` parameter), correct snapshot reading (atomic snapshot on
   the module side).
 - A check of the `REG_V03_PERIOD_VALID` flag before reading (the
   `snap.valid` field).
@@ -2885,7 +2885,7 @@ Internally the component guarantees:
 |---|---|---|
 | Reading U / I / P / PF / frequency | ✅ | only for debugging on a logic analyzer |
 | Per-period energy accounting | ✅ | only if Wh is stored outside the component (e.g. in a database on the master side) |
-| Several modules on one bus | ✅ (sequential LATCH + shared settle, see [06_examples.md](06_examples.md)) | — |
+| Several modules on one bus | ✅ (sequential snapshot + shared settle, see [06_examples.md](06_examples.md)) | — |
 | Bidirectional accounting on BASIC | ✅ (via RT reads — see [06_examples.md](06_examples.md)) | the alternative is your own RT-read loop + manual integration |
 | Porting to another platform | n/a | ✅ — see [09 · API Reference](09_api_reference.md) for wire-protocol details |
 | Hard RAM limit | rarely matters (~85 bytes per handle) | ✅ if even those ~85 bytes are critical |
@@ -2903,7 +2903,7 @@ right choice.
 
 ![Sequence of bus transactions performed by rbamp_begin().](images/esp-idf-begin-flow.png)
 
-The first latch is a primer (the module returns whatever has
+The first snapshot is a primer (the module returns whatever has
 accumulated since power-on, which is not suitable for tariff
 accounting). The component itself records that this snapshot must be
 discarded — the user code never sees it.
@@ -2912,7 +2912,7 @@ discarded — the user code never sees it.
 
 ![Sequence of a period snapshot read and the energy integration on the master.](images/esp-idf-snapshot-flow.png)
 
-The atomic latch on the module side guarantees that every measurement
+The atomic snapshot on the module side guarantees that every measurement
 within a period lands in exactly one snapshot — no
 duplication and no losses at the period boundary.
 

@@ -29,11 +29,11 @@ chapter is a **distillation of the key logic**, not the full project
 | 13 | Battery logger with deep-sleep | medium | [`examples/deep_sleep_logger/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/deep_sleep_logger/) |
 | 14 | I3 with different CT per channel (mixed-load deep-dive) | medium | (composition) |
 | 15 | Sub-metering: 5×UI1 on a shared bus | high | (composition) |
-| 16 | GC broadcast latch for >8 modules | high | (composition) |
+| 16 | GC broadcast snapshot for >8 modules | high | (composition) |
 | 17 | GC group filtering (multi-tenant metering) | high | (composition) |
 | 18 | STD module: reactive / apparent power, THD, master-timed energy | medium | [`examples/std_meter/`](https://github.com/rb-amp/rbamp-esp-idf/tree/main/examples/std_meter/) |
 
-> Scenario 18 shows the STD module line. Scenarios 1–4 are the flagship ones, built around the library's canonical deployment. Their code uses the fleet API and is validated on bench hardware (a heterogeneous UI1+I2+I3 fleet). Scenarios 5–13 are single-module and compose patterns; 14–17 are extended fleet scenarios (a deep-dive into the capabilities introduced in 1–4). Scenario 7 is the legacy sequential per-module latch without the fleet API, kept for comparison and as a migration path.
+> Scenario 18 shows the STD module line. Scenarios 1–4 are the flagship ones, built around the library's canonical deployment. Their code uses the fleet API and is validated on bench hardware (a heterogeneous UI1+I2+I3 fleet). Scenarios 5–13 are single-module and compose patterns; 14–17 are extended fleet scenarios (a deep-dive into the capabilities introduced in 1–4). Scenario 7 is the legacy sequential per-module snapshot without the fleet API, kept for comparison and as a migration path.
 
 > All scenarios assume the sensor class and CT model have already
 > been configured via `rbamp_set_sensor_class()` + `rbamp_set_ct_model()`
@@ -90,7 +90,7 @@ system over a heterogeneous fleet, closed in a single loop:
 2. **Configure** — `rbamp_configure_channels` sets the sensor class +
    per-channel CT models + a single terminal `SAVE_USER_CONFIG` in one
    call per multi-channel module.
-3. **GC arm** — `rbamp_fleet_enable_gc_all` enables General-Call latch
+3. **GC arm** — `rbamp_fleet_enable_gc_all` enables General-Call snapshot
    reception on every module in the fleet.
 4. **Loop** — on each tick the master performs an atomic
    `_gclatch` (a synchronous snapshot across the whole fleet),
@@ -232,7 +232,7 @@ ITER 1..N:  GC in_sync=3/3 skew=0 | poll n_ok=3/3 | P_total≈1260 W  | E_total:
 
 - **One synchronized loop is the whole system.** Each tick: one
   `gclatch` (a single I²C General-Call transaction) → all modules
-  atomically start their period latch (`check_sync` = 3/3, skew = 0) →
+  atomically start their period snapshot (`check_sync` = 3/3, skew = 0) →
   one `poll_all` reads the whole fleet → aggregation. No drift between
   modules from a chain of sequential round-trips.
 - **`total_power` behavior in a heterogeneous fleet.** UI1 yields
@@ -254,7 +254,7 @@ ITER 1..N:  GC in_sync=3/3 skew=0 | poll n_ok=3/3 | P_total≈1260 W  | E_total:
   Verified on bench: a module that disconnected mid-run left the fleet
   polling at `n_ok=2/3` without a stall. The same goes for `check_sync`
   — `missed_idx` points to the first out-of-sync module while the rest
-  keep latching.
+  keep taking snapshots.
 - **Balance analytics.** In the 80% canon:
   `balance = P_mains − Σ(V_mains × I_sub[k])` — an estimate of "the
   rest" (background consumption, unaccounted-for loads). Targeted code
@@ -451,7 +451,7 @@ sensor class + per-channel CT models.
 
 ## Scenario 4 — Fleet GC sync (tariff-period synchronicity)
 
-**Goal:** demonstrate an atomic latch across the whole fleet with a
+**Goal:** demonstrate an atomic snapshot across the whole fleet with a
 single I²C General-Call frame. Unlike the sequential per-module
 `CMD_LATCH_PERIOD` (where skew accumulates on every round-trip), GC
 synchronizes all modules in a **single** bus transaction.
@@ -475,7 +475,7 @@ void app_main(void) {
     rbamp_fleet_sync_t sync_status[RBAMP_FLEET_MAX_MODULES];
     uint16_t tick = 0;
     for (int round = 0; round < 10; ++round) {
-        /* Step 2: a single broadcast latch — all modules atomically. */
+        /* Step 2: a single broadcast snapshot — all modules atomically. */
         ESP_ERROR_CHECK(rbamp_fleet_gclatch(fleet, /*group=*/0, tick,
                                             /*settle_ms=*/50));
 
@@ -516,7 +516,7 @@ round 9  tick=9  in_sync=3/3   skew=0
   snapshot difference between modules matters for reporting (for
   example, a balance calculation `mains − Σ(sub)` integrated over time
   — module skew introduces a systematic error), GC delivers `skew = 0`
-  by bench measurement. A sequential per-module latch on the same
+  by bench measurement. A sequential per-module snapshot on the same
   3 modules accumulates 100-300 µs per module × N, which becomes
   noticeable over a 60-minute window in pinpoint analytics.
 - **Large fleet.** As the number of modules grows, the difference
@@ -597,7 +597,7 @@ bus.
 LCD with a PCF8574 I²C expander (HD44780-compatible). The LCD sits on
 the same I²C bus as the rbAmp. The component's key mechanism is
 `rbamp_read_period_snapshot()`, which encapsulates
-latch + settle + valid-check + read + Wh-tick in a single call.
+snapshot + settle + valid-check + read + Wh-tick in a single call.
 
 ```c
 #include "freertos/FreeRTOS.h"
@@ -665,9 +665,9 @@ with their WARNING notes).
 > `rbamp_fleet_enable_gc_all()` — the canonical fleet-sync path for
 > tight synchronization between sub-meters (see the `Strategy 2`
 > fleet-GC section earlier in this chapter). On legacy v1.0-v1.2
-> firmware (no General-Call latch support) the call returns
+> firmware (no General-Call snapshot support) the call returns
 > `ESP_ERR_NOT_SUPPORTED` and the library falls back to the per-device
-> latch shown above. See
+> snapshot shown above. See
 > [09 · API Reference](09_api_reference.md)
 > for details.
 
@@ -700,7 +700,7 @@ void app_main(void) {
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(60000));
 
-        /* Phase 1: sequential LATCH on each device, measure the skew */
+        /* Phase 1: sequential snapshot on each device, measure the skew */
         const int64_t sync_start_us = esp_timer_get_time();
         for (int i = 0; i < N_MODULES; ++i) {
             if (modules[i]) rbamp_latch_period(modules[i]);
@@ -870,7 +870,7 @@ void app_main(void) {
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(60000));
 
-        /* Sequential LATCH + shared settle (the pattern from Scenario 3) */
+        /* Sequential snapshot + shared settle (the pattern from Scenario 3) */
         rbamp_latch_period(mains_dev);
         rbamp_latch_period(solar_dev);
         rbamp_latch_period(loads_dev);
@@ -1039,7 +1039,7 @@ section "Hybrid: local storage + sync" in
 ## Scenario 13 — Battery logger with deep-sleep
 
 **Goal:** an ESP32 wakes up once every 10 minutes, takes a single
-period latch, publishes via WiFi+MQTT, and goes back into deep-sleep.
+period snapshot, publishes via WiFi+MQTT, and goes back into deep-sleep.
 Energy persists through RTC memory between sleep cycles. The component's
 accumulator is **disabled** — the master owns the Wh persistence
 itself.
@@ -1048,7 +1048,7 @@ itself.
 > `rbamp_begin()` always issues a CMD_LATCH_PERIOD primer, which resets
 > the firmware's period accumulator. This means that after a deep-sleep
 > wake you cannot simply call `rbamp_read_period_snapshot()` by default
-> — that call would latch again and return near-zero data ~50 ms after
+> — that call would take another snapshot and return near-zero data ~50 ms after
 > the primer. The correct pattern below uses `skip_latch=true` to read
 > the data accumulated during the sleep interval, and the **master's
 > own RTC timer** for the interval between wakeups (the
@@ -1088,11 +1088,11 @@ void app_main(void) {
     }
 
     ESP_ERROR_CHECK(rbamp_new(bus, 0x50, &dev));
-    ESP_ERROR_CHECK(rbamp_begin(dev));          /* issues the primer LATCH */
+    ESP_ERROR_CHECK(rbamp_begin(dev));          /* issues the primer snapshot */
     rbamp_energy_disable(dev);                  /* the master owns Wh itself */
 
     if (!rtc_primer_done) {
-        /* First wake: the primer just latched the "dirty" data from
+        /* First wake: the primer snapshot just captured the "dirty" data from
          * before wake. Record the time and go straight back to sleep —
          * the next wake in 10 min gets a full accumulator for the interval. */
         rtc_last_wake_us = esp_timer_get_time();
@@ -1207,7 +1207,7 @@ void mixed_load_task(void *arg) {
 
 **Goal:** monitor 5 independent lines in a single-phase apartment with **tariff-period synchronicity** of periods. One UI1 per line (5 modules total).
 
-This is **strategy 1** for period sync from [04 · Wiring](04_hardware.md#period-sync--synchronizing-periods-for-tight-synchronization): sequential latch + shared settle.
+This is **strategy 1** for period sync from [04 · Wiring](04_hardware.md#period-sync--synchronizing-periods-for-tight-synchronization): sequential snapshot + shared settle.
 
 ```c
 #define N_METERS 5
@@ -1226,7 +1226,7 @@ void sub_meter_task(void *arg) {
             continue;
         }
 
-        /* Phase 1: sequential latch (skew ~5 ms between modules at 50 kHz) */
+        /* Phase 1: sequential snapshot (skew ~5 ms between modules at 50 kHz) */
         for (int i = 0; i < N_METERS; i++) {
             rbamp_latch_period(meters[i]);
         }
@@ -1253,13 +1253,13 @@ void sub_meter_task(void *arg) {
 }
 ```
 
-**Skew analysis:** 5 modules × ~1 ms/latch = ~5 ms. Relative to the 60-s period = 0.008%. Negligible.
+**Skew analysis:** 5 modules × ~1 ms/snapshot = ~5 ms. Relative to the 60-s period = 0.008%. Negligible.
 
 **Bus budget**: 5 modules × ~5 ms RT block = 25 ms for a full round; this also fits at a 5 Hz polling rate (25 ms ≪ 100 ms). Bus headroom is comfortable up to ~15 UI1 modules.
 
 ---
 
-## Scenario 16 — GC broadcast latch (tight sync for >8 modules)
+## Scenario 16 — GC broadcast snapshot (tight sync for >8 modules)
 
 **Goal:** at ≥ 8 modules the skew of strategy 1 (sequential) approaches ~10 ms. For tariff-period synchronicity — **strategy 2**, General-Call broadcast.
 
@@ -1273,7 +1273,7 @@ rbamp_save_user_config(dev);   /* CMD_SAVE_USER_CONFIG, production-OK */
 rbamp_reset(dev);              /* CMD_RESET, settle ~300 ms */
 ```
 
-**Runtime broadcast latch with witness**:
+**Runtime broadcast snapshot with witness**:
 
 ```c
 #define N_METERS 12
@@ -1294,7 +1294,7 @@ esp_err_t synced_latch(rbamp_handle_t meters[], int n,
     esp_err_t err = rbamp_bus_general_call_write(bus_h, frame, sizeof(frame));
     if (err != ESP_OK) return err;
 
-    /* Settle: latch + 1 commit-cycle for witness refresh */
+    /* Settle: snapshot + 1 commit-cycle for witness refresh */
     vTaskDelay(pdMS_TO_TICKS(50));
 
     /* Witness check: each module should show PERIOD_VALID = 1 */
@@ -1305,12 +1305,12 @@ esp_err_t synced_latch(rbamp_handle_t meters[], int n,
             && valid == 1) {
             n_ok++;
         } else {
-            ESP_LOGW("gc-latch", "module %d did not latch (witness=0)", i);
+            ESP_LOGW("gc-latch", "module %d did not take its snapshot (witness=0)", i);
         }
     }
 
     if (n_ok < n) {
-        ESP_LOGW("gc-latch", "fallback to sequential latch for %d modules",
+        ESP_LOGW("gc-latch", "fallback to sequential snapshot for %d modules",
                  n - n_ok);
         /* Strategy 1 fallback on the remaining ones */
         for (int i = 0; i < n; i++) {
@@ -1327,7 +1327,7 @@ esp_err_t synced_latch(rbamp_handle_t meters[], int n,
 }
 ```
 
-**Skew analysis**: a GC frame is ~1 ms at 50 kHz → all 12 modules latch **simultaneously** at the bus level. Skew is practically 0.
+**Skew analysis**: a GC frame is ~1 ms at 50 kHz → all 12 modules take their snapshot **simultaneously** at the bus level. Skew is practically 0.
 
 **When to use**: ≥ 8 modules and/or tight synchronization.
 
@@ -1337,7 +1337,7 @@ esp_err_t synced_latch(rbamp_handle_t meters[], int n,
 
 ## Scenario 17 — GC group filtering (multi-tenant metering)
 
-**Goal**: 10 modules on a single bus, where you need to latch **subsets** independently. For example, 5 modules meter tariff A (daytime), 5 — tariff B (nighttime); they are armed and read on different schedules.
+**Goal**: 10 modules on a single bus, where you need to take snapshots of **subsets** independently. For example, 5 modules meter tariff A (daytime), 5 — tariff B (nighttime); they are armed and read on different schedules.
 
 **Setup (once)**:
 
@@ -1359,11 +1359,11 @@ for (int i = 5; i < 10; i++) {
 }
 ```
 
-**Runtime — independent latch per tariff**:
+**Runtime — independent snapshot per tariff**:
 
 ```c
 void daytime_cycle(uint16_t tick) {
-    /* Latch tariff A only */
+    /* Snapshot tariff A only */
     uint8_t frame[5] = { 0xA5, 0x27, 0x01, (uint8_t)tick, (uint8_t)(tick >> 8) };
     rbamp_bus_general_call_write(bus_h, frame, 5);
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -1371,7 +1371,7 @@ void daytime_cycle(uint16_t tick) {
 }
 
 void nighttime_cycle(uint16_t tick) {
-    /* Latch tariff B only */
+    /* Snapshot tariff B only */
     uint8_t frame[5] = { 0xA5, 0x27, 0x02, (uint8_t)tick, (uint8_t)(tick >> 8) };
     rbamp_bus_general_call_write(bus_h, frame, 5);
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -1379,13 +1379,13 @@ void nighttime_cycle(uint16_t tick) {
 }
 
 void all_modules_snapshot(uint16_t tick) {
-    /* group = 0x00 — all-call, all 10 latch */
+    /* group = 0x00 — all-call, all 10 take a snapshot */
     uint8_t frame[5] = { 0xA5, 0x27, 0x00, (uint8_t)tick, (uint8_t)(tick >> 8) };
     rbamp_bus_general_call_write(bus_h, frame, 5);
 }
 ```
 
-**Benefits**: one cycle per tariff = clean separation of metering intervals. Without groups you would have to maintain parallel sequential latch loops with conflict resolution.
+**Benefits**: one cycle per tariff = clean separation of metering intervals. Without groups you would have to maintain parallel sequential snapshot loops with conflict resolution.
 
 ---
 
@@ -1415,7 +1415,7 @@ if (std) {
 
     /* Period energy depends on what the module offers. */
     if (info.period_source == RBAMP_STD_PERIOD_LATCH) {
-        /* Latch banks: keep bank 0 (the library's) armed, add our own. */
+        /* Snapshot banks: keep bank 0 (the library's) armed, add our own. */
         rbamp_std_arm_banks(dev, (1u << 0) | (1u << 1));
         rbamp_std_latch(dev, 1);                    /* primer: the period starts now */
     }                                               /* COUNTERS: nothing to arm */
@@ -1443,13 +1443,13 @@ while (1) {
 ```
 
 **Notes:**
-- `dt_ms` is the **master** wall-clock between two latches of the bank —
+- `dt_ms` is the **master** wall-clock between two snapshots of the bank —
   the module has no clock of its own for the period.
-- On a counter module there is no latch and nothing to arm: the library's
+- On a counter module there is no snapshot bank and nothing to arm: the library's
   period snapshot reads the persisted counters and reports the difference;
   `module_restarted` flags a reboot inside the period (the difference is
   still valid).
-- The latch-bank mask is RAM on the module. If a module reset clears it,
+- The snapshot-bank mask is RAM on the module. If a module reset clears it,
   `rbamp_std_read_latch()` re-arms the bank and returns
   `ESP_ERR_INVALID_STATE` for that one period — drop it and restart your
   dt anchor.
@@ -1478,7 +1478,7 @@ while (1) {
 | 15 | ~80 | shared 5×UI1 | yes | no | no | RAM |
 | 16 | ~100 | shared 12 modules | yes (GC sync) | no | no | RAM |
 | 17 | ~60 | shared 10 modules multi-tenant | yes (GC groups) | no | no | RAM |
-| 18 | ~110 | dedicated (STD module) | yes (latch bank or counters) | no | no | RAM (life-time counters live on the module) |
+| 18 | ~110 | dedicated (STD module) | yes (snapshot bank or counters) | no | no | RAM (life-time counters live on the module) |
 
 ## What's next
 

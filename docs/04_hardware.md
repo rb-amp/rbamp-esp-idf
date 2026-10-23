@@ -255,19 +255,19 @@ On a 50 kHz bus a single register-read transaction ≈ 200-400 µs (depends on t
 
 #### Period sync — synchronizing periods for tight synchronization
 
-For tariff metering all modules must latch the **same** time interval. Two strategies:
+For tariff metering all modules must take their snapshot over the **same** time interval. Two strategies:
 
 ![Sequential latch of each module compared with one General-Call frame latching all modules at once.](images/period-broadcast-latch.png)
 
-**Strategy 1 — sequential latch + shared settle** (works on any firmware):
+**Strategy 1 — sequential snapshot + shared settle** (works on any firmware):
 
 ```c
-/* Phase 1: sequential latch */
+/* Phase 1: sequential snapshot */
 for (int i = 0; i < n; i++) {
     rbamp_latch_period(devs[i]);
 }
 
-/* Phase 2: shared settle (≥ 50 ms for latch + ~1 commit cycle for witness) */
+/* Phase 2: shared settle (≥ 50 ms for the snapshot + ~1 commit cycle for witness) */
 vTaskDelay(pdMS_TO_TICKS(50));
 
 /* Phase 3: read snapshots with skip_latch=true */
@@ -277,13 +277,13 @@ for (int i = 0; i < n; i++) {
 }
 ```
 
-Skew between modules: 16 modules × ~1 ms/latch = ~16 ms relative to a 60-second period → **0.027%**. Negligible.
+Skew between modules: 16 modules × ~1 ms/snapshot = ~16 ms relative to a 60-second period → **0.027%**. Negligible.
 
-**Strategy 2 — General-Call broadcast latch** (requires enabling):
+**Strategy 2 — General-Call broadcast snapshot** (requires enabling):
 
-All modules receive the latch in a single I²C frame on addr `0x00`:
+All modules receive the snapshot in a single I²C frame on addr `0x00`:
 
-![The layout of the 5-byte General-Call latch frame sent to address 0x00.](images/init-gc-frame.png)
+![The layout of the 5-byte General-Call snapshot frame sent to address 0x00.](images/init-gc-frame.png)
 
 ```
 addr=0x00 | A5 27 <group> <tick_lo> <tick_hi>   (5 bytes)
@@ -304,18 +304,18 @@ When to use which:
 
 `REG_GROUP_ID (0x28)` lets you have several GC domains on a single bus:
 
-- `group = 0x00` → all-call (all modules with GC enabled latch).
-- `group = N` → only modules with `REG_GROUP_ID = N` latch.
+- `group = 0x00` → all-call (all modules with GC enabled take the snapshot).
+- `group = N` → only modules with `REG_GROUP_ID = N` take the snapshot.
 
-Example: a bus with 10 modules, where you need to latch 5 for tariff A and 5 for tariff B independently:
+Example: a bus with 10 modules, where you need to snapshot 5 for tariff A and 5 for tariff B independently:
 
 ```
 write REG_GROUP_ID = 1 on the 5 tariff-A modules
 write REG_GROUP_ID = 2 on the 5 tariff-B modules
 
-GC frame [A5 27 01 tl th] → only tariff A latches
-GC frame [A5 27 02 tl th] → only tariff B latches
-GC frame [A5 27 00 tl th] → all 10 latch (all-call)
+GC frame [A5 27 01 tl th] → only tariff A takes a snapshot
+GC frame [A5 27 02 tl th] → only tariff B takes a snapshot
+GC frame [A5 27 00 tl th] → all 10 take a snapshot (all-call)
 ```
 
 #### Failure modes on a multi-module bus
@@ -325,14 +325,14 @@ GC frame [A5 27 00 tl th] → all 10 latch (all-call)
 | `i2c bus scan` shows several modules at the same address after a field add | The new module on `0x50` conflicts with an already-addressed one | Re-flash the new module's address **separately** before adding it to the bus |
 | One module starts NACK'ing more often than the others | Cable fault / VCC drop on that module | Check VCC under load + logic levels |
 | One module's Wh consistently diverges | The module's own timer differs from the master clock | Integrate energy against the master clock (`master_dt_ms`) |
-| After a GC frame one module does not latch | `FLEET_CONFIG.bit0 = 0` or group mismatch | Check `REG_FLEET_CONFIG` and `REG_GROUP_ID` |
+| After a GC frame one module does not take the snapshot | `FLEET_CONFIG.bit0 = 0` or group mismatch | Check `REG_FLEET_CONFIG` and `REG_GROUP_ID` |
 
 #### Bus design notes
 
-- **Clock stretching**: the current firmware minimizes stretch (the `__disable_irq` window in LatchPeriod is short, ~µs). The latch itself does not pull SCL significantly. For the Raspberry Pi BCM283x (a known clock-stretching hw bug): apply the standard caution — 50 kHz + retry are already recommended.
+- **Clock stretching**: the current firmware minimizes stretch (the `__disable_irq` window in LatchPeriod is short, ~µs). The snapshot itself does not pull SCL significantly. For the Raspberry Pi BCM283x (a known clock-stretching hw bug): apply the standard caution — 50 kHz + retry are already recommended.
 - **Bus length with >4 modules**: even on a twisted pair the effective capacitance grows linearly with the count. Consider an I²C buffer (PCA9515) at ≥ 8 modules + a length > 1 m.
 
-Detailed multi-module scenarios are in [06 · Examples](06_examples.md), the “Sub-metering shared bus” and “GC broadcast latch” scenarios.
+Detailed multi-module scenarios are in [06 · Examples](06_examples.md), the “Sub-metering shared bus” and “GC broadcast snapshot” scenarios.
 
 ## Pinout on the ESP32 family
 

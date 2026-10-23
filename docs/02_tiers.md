@@ -122,7 +122,7 @@ detects them. On top of what BASIC offers, an STD module provides:
   harmonics extraction is switched on — THD and displacement power
   factor. Three-phase modules also report the voltage phase angles and
   the phase sequence.
-- **Period mechanisms:** latch banks (eight independent, master-timed
+- **Period mechanisms:** snapshot banks (eight independent, master-timed
   periods) on modules that have them, or counter differences on modules
   that keep energy on the device. The mechanism is chosen at
   `rbamp_begin()` (`rbamp_std_info_t.period_source`).
@@ -142,11 +142,11 @@ chapter "STD line". A working example is
 |---|---|---|
 | Export in `rbamp_energy_wh()` | not counted (monotonic, consumption only) | signed — net of import and export |
 | Reactive / apparent power, THD | not available — on BASIC, reactive power is not exposed by this library (`ESP_ERR_NOT_SUPPORTED`) | available |
-| Period source | latch of the period accumulator | latch banks, or counter differences |
+| Period source | snapshot of the period accumulator | snapshot banks, or counter differences |
 | Module clock | none | set it with `rbamp_std_set_time()` after every module reset |
 | `rbamp_factory_reset()` | supported | `ESP_ERR_NOT_SUPPORTED` |
 | Digest (`rbamp_read_digest()`) | supported on firmware with the capability | `ESP_ERR_NOT_SUPPORTED` |
-| Period calls on a module with neither latch banks nor counters | — | `ESP_ERR_NOT_SUPPORTED` |
+| Period calls on a module with neither snapshot banks nor counters | — | `ESP_ERR_NOT_SUPPORTED` |
 
 ### Typical applications
 

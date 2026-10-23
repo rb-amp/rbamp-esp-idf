@@ -443,7 +443,7 @@ unresponsive or the master is polling too often.
 
 ### Cadence-check procedure
 
-1. **Check the cadence:** 60 s between latches is comfortable; 30 s
+1. **Check the cadence:** 60 s between snapshots is comfortable; 30 s
    is marginal; < 10 s guarantees stales.
 2. **Check the module's responsiveness** between snapshots:
 
@@ -472,7 +472,7 @@ unresponsive or the master is polling too often.
 If you use a deep-sleep pattern, the **default**
 `rbamp_read_period_snapshot()` right after `rbamp_begin()` will
 always be stale (or give near-zero values) — `begin()` does an
-approximate LATCH that resets the firmware accumulator. The canonical
+approximate snapshot that resets the firmware accumulator. The canonical
 pattern uses `skip_latch=true` + the master's own RTC-saved
 timestamp — see [06 · Examples](06_examples.md), Scenario 9.
 
@@ -497,7 +497,7 @@ reference meter (Kill-A-Watt, etc.).
    cadence (see above).
 3. **Master clock drift:** `esp_timer_get_time()` is reliable on its
    own. But if the master goes into deep sleep without saving RTC,
-   the interval between the previous and next latch is lost. Use the
+   the interval between the previous and next snapshot is lost. Use the
    RTC_DATA_ATTR pattern from Scenario 9 for deep-sleep scenarios.
 
 ### Accumulator precision

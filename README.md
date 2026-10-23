@@ -15,14 +15,14 @@ and multi-module fleets on one bus.
 
 - **Real-time metering** — voltage, current, real power, power factor and
   mains frequency, per channel.
-- **Period energy** — latched average power and a Wh accumulator integrated
+- **Period energy** — snapshot average power and a Wh accumulator integrated
   against the master's clock.
 - **Multi-channel** — the channel count follows the module (1, 2, 3, 5 or 7
   channels); per-channel reads and mixed current-transformer configuration,
   with a read-before-write guard for modules calibrated with their sensor.
 - **Two module lines, one API** — the current module line and the STD line
   (16-bit register map: reactive / apparent power, THD, per-channel energy
-  counters, latch banks, firmware update session checks) behind the same
+  counters, snapshot banks, firmware update session checks) behind the same
   handle.
 - **Data-ready line and compact reads** — wait on the module's DRDY pin or
   poll; read one measurement window in a single transaction
@@ -34,7 +34,7 @@ and multi-module fleets on one bus.
   firmware keeps its 30 A calibration (`rbamp_sct_correction`).
 - **Fleet / multi-module** — bus scan with duplicate-address detect-and-exclude,
   one-virgin-at-a-time provisioning (two-phase address commit), General-Call
-  fleet-synchronous latch, and aggregated power / energy.
+  fleet-synchronous snapshot, and aggregated power / energy.
 - **Robust transport** — per-byte NACK retry, bus-reset recovery, per-quantity
   sanity bounds, and synchronous config-write verification.
 
@@ -104,7 +104,7 @@ documented with Doxygen.
 
 | Header | Surface |
 |---|---|
-| [`include/rbamp.h`](include/rbamp.h) | Lifecycle (`rbamp_new` / `rbamp_begin` / `rbamp_del`), real-time reads (`rbamp_read_all`, `rbamp_read_voltage/current/power/power_factor/frequency`), period + energy (`rbamp_read_period_snapshot`, `rbamp_energy_wh`), configuration (`rbamp_set_sensor_class`, `rbamp_set_ct_model[_ch]`, `rbamp_configure_channels`), identity / capability (`rbamp_read_variant/capability/uid`), error + event signalling (`rbamp_has_error`, `rbamp_read_event_flags`, `rbamp_clear_error`), provisioning (`rbamp_prepare/commit_address_change`, `rbamp_save_user_config`), General-Call latch, diagnostics. |
+| [`include/rbamp.h`](include/rbamp.h) | Lifecycle (`rbamp_new` / `rbamp_begin` / `rbamp_del`), real-time reads (`rbamp_read_all`, `rbamp_read_voltage/current/power/power_factor/frequency`), period + energy (`rbamp_read_period_snapshot`, `rbamp_energy_wh`), configuration (`rbamp_set_sensor_class`, `rbamp_set_ct_model[_ch]`, `rbamp_configure_channels`), identity / capability (`rbamp_read_variant/capability/uid`), error + event signalling (`rbamp_has_error`, `rbamp_read_event_flags`, `rbamp_clear_error`), provisioning (`rbamp_prepare/commit_address_change`, `rbamp_save_user_config`), General-Call snapshot, diagnostics. |
 | [`include/rbamp_fleet.h`](include/rbamp_fleet.h) | Multi-module bus manager: `rbamp_fleet_create`, `rbamp_fleet_scan`, `rbamp_provision`, `rbamp_fleet_assign_address`, `rbamp_fleet_poll_all`, `rbamp_fleet_enable_gc_all` / `rbamp_fleet_gclatch` / `rbamp_fleet_check_sync`, `rbamp_fleet_total_power` / `rbamp_fleet_total_energy_wh`, conflict detect-and-exclude. |
 | [`include/rbamp_energy.h`](include/rbamp_energy.h) | Internal Wh accumulator (used through the `rbamp_energy_*` wrappers in `rbamp.h`). |
 

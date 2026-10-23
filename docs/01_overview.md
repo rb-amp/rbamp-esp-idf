@@ -112,7 +112,7 @@ signed energy counters:
 | Tier | RT power `P` | Per-period accumulator `avg_p[ch]` | Component Wh counter |
 |---|---|---|---|
 | **BASIC** | signed (negative = export to the grid, visible in real time) | each **100 ms window** of average P is clamped to `max(P, 0)` before being added to the period accumulator | **monotonic** — consumption-only accounting |
-| **STANDARD (STD)** | signed; also reactive and apparent power | latch banks, or counter differences — export is kept (import and export counted separately) | **signed** net value (negative = net export) |
+| **STANDARD (STD)** | signed; also reactive and apparent power | snapshot banks, or counter differences — export is kept (import and export counted separately) | **signed** net value (negative = net export) |
 | **PRO** | not implemented | not implemented | not implemented |
 
 For details, see chapter [02 · Module lines](02_tiers.md). At the
@@ -131,7 +131,7 @@ differences show up in the values the module returns and in the extra
 ## What this component does
 
 
-![Timeline of back-to-back 100 ms measurement windows, the optional data-ready pulses and a master-latched period snapshot.](images/window-period-latch-concept.png)
+![Timeline of back-to-back 100 ms measurement windows, the optional data-ready pulses and a master-triggered period snapshot.](images/window-period-latch-concept.png)
 Its main job is to hide the protocol exchange and relieve the user
 application of the routine of dealing with registers, byte order,
 and post-command settle times. Additionally, the component
@@ -139,7 +139,7 @@ and post-command settle times. Additionally, the component
 period-averaged power, and the integration is done by the master via
 `esp_timer_get_time()`.
 
-The component also takes care of the period accounting: it latches,
+The component also takes care of the period accounting: it takes a snapshot,
 waits for the module to settle, checks that the snapshot is valid, and
 integrates Wh against the master clock (`rbamp_read_period_snapshot()` and
 `rbamp_energy_wh()`, see [05 · Quickstart](05_quickstart.md) Step 5). The
