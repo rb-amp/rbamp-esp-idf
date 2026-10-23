@@ -21,12 +21,13 @@ call, obtain the total consumed power and the "inlet − Σ(loads)"
 balance, catch per-module errors, and — when needed — synchronize
 period snapshots with a broadcast command.
 
-**Multi-channel** modules are also supported. On current hardware
-**I2** (2 current channels) and **I3** (3 current channels) are
-available — each channel with its own CT sensor model. This is
-typical for a sub-panel where a single installation point monitors
-several feeders: one module gives a **per-channel current
-breakdown** without a separate module on each.
+**Multi-channel** modules are also supported — the current-only
+**I2** / **I3** (2 / 3 current channels) and the voltage-equipped
+**UI2** / **UI3** / **UI5** / **UI7** (2 / 3 / 5 / 7 current channels,
+with power, PF and Wh per channel). Each channel has its own CT sensor
+model. This is typical for a sub-panel where a single installation point
+monitors several feeders: one module gives a **per-channel breakdown**
+without a separate module on each.
 
 > **Important architectural detail.** Power and Wh need a UI variant; a
 > "mains minus sum of loads" balance needs a UI module on every load.
@@ -36,7 +37,8 @@ breakdown** without a separate module on each.
 > UI-variants** (which have a voltage front-end). In the canonical
 > deployment the "mains-meter" role (total energy) is filled by a
 > single **UI1** at the mains inlet, while the sub-meter role
-> (per-load current detail) is filled by **I2**/**I3** modules.
+> (per-load current detail) is filled by **I2**/**I3** modules (or by
+> **UI2** / **UI3** / **UI5** / **UI7** when power and Wh are needed per load).
 
 Working with a **single** module is the minimal case of this same
 library: `rbamp_handle_t` is the building-block that the fleet is
@@ -49,6 +51,7 @@ same handle directly — no fleet-API needed.
 
 - 1 module at the inlet (mains) — total consumption and grid quality.
 - N modules on individual loads — per-channel accounting.
+- Multi-channel modules fit this case too: one **UI2** / **UI3** / **UI5** / **UI7** (or **I2** / **I3**) can meter several loads, each on its own channel — N modules do not have to mean N loads.
 - A single fleet call `rbamp_fleet_poll_all()` polls everything; the
   balance `mains − Σ(sub_loads)` reveals the "rest" (background
   consumption, unaccounted loads, leakage).
