@@ -478,7 +478,8 @@ static void test_digest(void)
     CHECK(strcmp(rbamp_basic_fw_name(0x04), "1.2-1.4.3") == 0);
     CHECK(strcmp(rbamp_basic_fw_name(0x03), "<1.2") == 0 && strcmp(rbamp_basic_fw_name(0x00), "<1.2") == 0);
     CHECK(rbamp_basic_fw_name(0x06) == NULL && rbamp_basic_fw_name(0x08) == NULL && rbamp_basic_fw_name(0x09) == NULL);
-    CHECK(rbamp_basic_fw_name(0x0C) == NULL && rbamp_basic_fw_name(0xFF) == NULL);
+    CHECK(strcmp(rbamp_basic_fw_name(0x0D), "1.4.21") == 0 && strcmp(rbamp_basic_fw_name(0x0C), "1.4.20") == 0);
+    CHECK(rbamp_basic_fw_name(0x0E) == NULL && rbamp_basic_fw_name(0xFF) == NULL);
 }
 
 static void test_sct_rating(void)

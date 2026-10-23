@@ -508,7 +508,8 @@ const char *rbamp_basic_fw_name(uint8_t version);
 
 A pure lookup (no bus traffic): the human firmware name for a BASIC
 `REG_VERSION` byte as returned by `rbamp_firmware_version()` — for
-example `0x0B` → `"1.4.19"`, `0x0A` → `"1.4.18"`, `0x07` →
+example `0x0D` → `"1.4.21"`, `0x0C` → `"1.4.20"`, `0x0B` → `"1.4.19"`,
+`0x0A` → `"1.4.18"`, `0x07` →
 `"1.4.15-1.4.17"`, `0x05` → `"1.4.4-1.4.14"`, `0x04` → `"1.2-1.4.3"`,
 `0x00..0x03` → `"<1.2"`. Any other byte → `NULL` (unknown, or not a
 BASIC module).

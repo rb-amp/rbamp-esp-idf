@@ -296,6 +296,8 @@ bool rbampi_digest_needs_rearm(bool *reset_seen, bool events_pending, uint8_t ev
 const char *rbamp_basic_fw_name(uint8_t version)
 {
     switch (version) {
+        case 0x0D: return "1.4.21";
+        case 0x0C: return "1.4.20";
         case 0x0B: return "1.4.19";
         case 0x0A: return "1.4.18";
         case 0x07: return "1.4.15-1.4.17";

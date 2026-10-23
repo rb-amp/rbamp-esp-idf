@@ -107,6 +107,7 @@ on a host running ESP-IDF 5.4.1.
   is. No timing behaviour changed.
 
 ### Fixed
+- `rbamp_basic_fw_name()` names firmware 1.4.20 (`0x0C`) and 1.4.21 (`0x0D`); it returned `NULL` for them.
 - `rbamp_read_all()` / `rbamp_read_all_ready()` on a module with more than
   three channels (UI5/UI7, BASIC or STD) wrote channels 3+ past the
   three-entry arrays of `rbamp_snapshot_t`: `frequency`, `topology` and
