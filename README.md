@@ -97,6 +97,28 @@ void app_main(void)
 }
 ```
 
+## Documentation
+
+Full user documentation: https://www.rbamp.com/docs/modules-basic-standard-esp-idf-overview
+
+The same chapters are in this repository, in [`docs/`](docs/):
+
+| Chapter | What it covers |
+|---|---|
+| [01 · Overview](docs/01_overview.md) | what rbAmp is, what the component does, architecture |
+| [02 · Module lines](docs/02_tiers.md) | BASIC and STANDARD (STD) modules and how `rbamp_begin()` tells them apart |
+| [03 · Sensor selection](docs/03_sensor_selection.md) | choosing an SCT-013 clamp and its model code |
+| [04 · Hardware setup](docs/04_hardware.md) | pinout, wiring, pull-ups, addressing, multi-module bus |
+| [05 · Quickstart](docs/05_quickstart.md) | first working project step by step |
+| [06 · Examples](docs/06_examples.md) | walkthrough of the example projects and scenarios |
+| [07 · DIY integrations](docs/07_diy_integrations.md) | Home Assistant, MQTT and other self-hosted setups |
+| [08 · Cloud integrations](docs/08_cloud_integrations.md) | cloud services and time-series databases |
+| [09 · API reference](docs/09_api_reference.md) | every public function, type and Kconfig option |
+| [10 · Troubleshooting](docs/10_troubleshooting.md) | common problems and how to work through them |
+| [11 · Changelog](docs/11_changelog.md) | component release history |
+
+Register-level (native) protocol documentation, for integrations without this library: [rbamp-docs](https://github.com/rb-amp/rbamp-docs).
+
 ## API overview
 
 All functions are declared in the three public headers; each is fully
@@ -116,7 +138,7 @@ documented with Doxygen.
 
 ## Examples
 
-Nine runnable projects under [`examples/`](examples/):
+Nine runnable projects under [`examples/`](examples/) (a walkthrough of each: [06 · Examples](docs/06_examples.md)):
 
 | Example | Shows |
 |---|---|
