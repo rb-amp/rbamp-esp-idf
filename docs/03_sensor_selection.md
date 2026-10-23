@@ -369,7 +369,7 @@ if (i_sum > 0.01f) {
 
 > This is an **approximation**: splitting by current works when the PF is
 > roughly the same across all loads. For accurate per-load power
-> accounting, use a UI variant (UI1 / UI2 / UI3) on each line.
+> accounting, use a UI variant (UI1 / UI2 / UI3 / UI5 / UI7) on each line.
 
 ### Applications of I2 / I3
 

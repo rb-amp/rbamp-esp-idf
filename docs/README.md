@@ -20,7 +20,7 @@ Documentation for the **rbAmp** esp-idf client for the rbAmp I²C energy-monitor
 
 | Term | Meaning |
 |---|---|
-| **UI1 / UI2 / UI3** | Module variants with a voltage input plus 1 / 2 / 3 current channels (power, PF and Wh available) |
+| **UI1 / UI2 / UI3 / UI5 / UI7** | Module variants with a voltage input plus 1 / 2 / 3 / 5 / 7 current channels (power, PF and Wh available) |
 | **I1 / I2 / I3** | Current-only variants (no voltage, no power or Wh) |
 | **BASIC / STANDARD (STD)** | The two shipping module lines; `rbamp_begin()` detects which one is connected |
 | **RT** | Real-time values (U, I, P, PF), refreshed by the module about every 100 ms |
