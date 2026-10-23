@@ -136,7 +136,7 @@ with a sharp blade:
 | 4…6 | Cut on all modules, one external 2.2…2.7 kΩ pair near the ESP32 |
 | 7…16 | Cut on all modules, one external 1.5…2.2 kΩ pair near the ESP32; check the bus capacitance (≤ 400 pF), lower the bus speed if needed |
 
-The external values are recommended values (calculated from the I²C specification: sink current ≤ 3 mA at 3.3 V, bus capacitance ≤ 400 pF).
+The external values are recommended values (calculated from the I²C specification: sink current ≤ 3 mA at 3.3 V, bus capacitance ≤ 400 pF). Connect the external pull-ups to **3.3 V** (the logic level of the bus), not to the 5 V `VCC` supply.
 
 > **If in doubt**: measure the resistance between SDA and the 3V3 line with
 > all devices unpowered. It should be in the **1.5..4.7 kΩ** range. Lower —
