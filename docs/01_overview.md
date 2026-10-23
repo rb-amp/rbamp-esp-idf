@@ -70,7 +70,7 @@ For details, see chapter **06 · Examples**, scenario 1
 | Peak current I_peak | float, A | depends on the selected sensor |
 | Active power P (signed in RT) | float, W | depends on the selected sensor |
 | Power factor PF | float | −1…+1 |
-| Mains frequency | uint8, Hz | 45…65 Hz |
+| Mains frequency | uint8, Hz | 50 / 60 Hz (detected) |
 | P averaged over a period | float, W | same as P |
 
 > **The RT value of active power `P` is always signed on any
