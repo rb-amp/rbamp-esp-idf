@@ -184,13 +184,15 @@ typedef enum {
  * @brief How an STD module delivers period energy — decided by ::rbamp_begin
  *        from the capability bits, exposed in ::rbamp_std_info_t.
  *
- * - @c RBAMP_STD_PERIOD_LATCH: the module has latch banks
- *   (@c RBAMP_STD_CAP_MULTI_LATCH). A period is latch-to-latch on bank 0,
- *   averages and per-channel energy come from the bank.
- * - @c RBAMP_STD_PERIOD_COUNTERS: no latch banks, but persisted life-time
+ * - @c RBAMP_STD_PERIOD_COUNTERS: the module has persisted life-time
  *   counters (@c RBAMP_STD_CAP_ONDEVICE_ENERGY). A period is the difference
  *   of two counter readings (Wh; mWh from map 0x36), taken on the master's schedule; no
  *   latch command, nothing to arm, nothing lost across a module restart.
+ *   Counters are preferred whenever the module has them, also when it has
+ *   latch banks as well.
+ * - @c RBAMP_STD_PERIOD_LATCH: latch banks
+ *   (@c RBAMP_STD_CAP_MULTI_LATCH) and no counters. A period is latch-to-latch
+ *   on bank 0, averages and per-channel energy come from the bank.
  * - @c RBAMP_STD_PERIOD_NONE: neither — the period / energy calls return
  *   @c ESP_ERR_NOT_SUPPORTED.
  */
@@ -1024,7 +1026,7 @@ esp_err_t rbamp_read_digest(rbamp_handle_t dev, rbamp_digest_t *out);
  * @brief Human firmware name for a BASIC @c REG_VERSION byte
  *        (::rbamp_firmware_version). Pure lookup, no bus traffic.
  *
- * 0x0D → "1.4.21", 0x0C → "1.4.20", 0x0B → "1.4.19", 0x0A → "1.4.18", 0x07 → "1.4.15-1.4.17",
+ * 0x0E → "1.4.22", 0x0D → "1.4.21", 0x0C → "1.4.20", 0x0B → "1.4.19", 0x0A → "1.4.18", 0x07 → "1.4.15-1.4.17",
  * 0x05 → "1.4.4-1.4.14", 0x04 → "1.2-1.4.3", 0x00..0x03 → "<1.2";
  * any other byte → NULL (unknown / not a BASIC module).
  */
@@ -1431,6 +1433,12 @@ esp_err_t rbamp_set_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t cod
  * and of the model currently held. Replaces the paired calibration of that
  * channel with the model's generic preset — use only when re-pairing a
  * module with a new sensor in service, followed by a calibration.
+ *
+ * On a BASIC module of class 2 or 3 the firmware 1.4.22 and later refuses
+ * class and model writes outside maintenance mode (a paired module is locked).
+ * The refusal comes back as @c ESP_ERR_INVALID_STATE with a log line naming
+ * the locked configuration, not as a generic parameter error: this path
+ * works on a paired module in maintenance mode only.
  */
 esp_err_t rbamp_set_ct_model_ch_force(rbamp_handle_t dev, uint8_t channel, uint8_t code);
 
@@ -1967,11 +1975,13 @@ esp_err_t rbamp_std_read_health(rbamp_handle_t dev, rbamp_std_health_t *out);
  * schedule: rbamp_std_latch(bank) → wait >= 300 ms (safe upper bound of one
  * measurement window on every image) → rbamp_std_read_latch
  * → rbamp_std_latch_wh with the master-measured dt since the previous latch.
- * Bank 0 is also what rbamp_read_period_snapshot / rbamp_energy_wh use.
+ * Bank 0 is what rbamp_read_period_snapshot / rbamp_energy_wh use on a module
+ * with banks and no counters.
  *
- * Only on modules with RBAMP_STD_CAP_MULTI_LATCH (rbamp_std_info_t
- * .period_source == RBAMP_STD_PERIOD_LATCH). The three bank calls return
- * ESP_ERR_NOT_SUPPORTED without bus traffic on any other module — use
+ * Only on modules with RBAMP_STD_CAP_MULTI_LATCH (capability bit 8), whatever
+ * the period source: a module with both banks and counters keeps its energy on
+ * the counters and offers the banks as an extra tool. The three bank calls
+ * return ESP_ERR_NOT_SUPPORTED without bus traffic on any other module — use
  * rbamp_std_read_energy / rbamp_std_energy_delta there.
  * ------------------------------------------------------------------------- */
 

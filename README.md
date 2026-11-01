@@ -47,7 +47,7 @@ component manager fetches the tagged release):
 dependencies:
   rbamp:
     git: https://github.com/rb-amp/rbamp-esp-idf.git
-    version: v1.7.2
+    version: v1.7.3
 ```
 
 Or vendor this repository into your project as `components/rbamp/` (the
@@ -118,6 +118,41 @@ The same chapters are in this repository, in [`docs/`](docs/):
 | [11 · Changelog](docs/11_changelog.md) | component release history |
 
 Register-level (native) protocol documentation, for integrations without this library: [rbamp-docs](https://github.com/rb-amp/rbamp-docs).
+
+## STD line
+
+<a id="std-line-minimum-version"></a>
+### Minimum component version for module image 0x0001007E
+
+Component **1.7.3** is the minimum for STD modules running module image
+version 0x0001007E, which reports both snapshot banks (capability bit 8) and
+on-device energy counters (capability bit 13). With 1.7.3 or later the
+energy (`rbamp_energy_wh`) and the period calls (`rbamp_read_period_snapshot`)
+come from the module's persisted counters, and `rbamp_std_info_t.period_source`
+reads `RBAMP_STD_PERIOD_COUNTERS`. Component 1.7.2 and older take the period
+from snapshot bank 0 on that image: the energy is then integrated on the master
+from bank snapshots instead of coming from the counters. Update the component
+before putting such a module into service. Older module images are not
+affected: modules with banks only keep the bank period, modules with counters
+only keep the counters.
+
+<a id="std-snapshot-banks"></a>
+### Snapshot banks
+
+A module that reports snapshot banks (capability bit 8) offers them as a separate
+tool, whichever source its energy comes from:
+
+| Call | Purpose |
+|---|---|
+| `rbamp_std_arm_banks(dev, mask)` | Arm the banks you want to use (bit 0 = bank 0). |
+| `rbamp_std_latch(dev, bank)` | Freeze a snapshot in one bank. |
+| `rbamp_std_read_latch(dev, bank, &snap)` | Read the frozen bank: average power, extremes, energy. |
+| `rbamp_std_latch_wh(&snap, dt_ms, ch, &import_wh, &export_wh)` | Energy in Wh for the master-measured time since the previous latch. |
+
+Bank 0 is left to the library; use banks 1 and up for your own periods. The
+calls return `ESP_ERR_NOT_SUPPORTED` without bus traffic on a module without
+banks. The `std_meter` example runs its own bank 1 next to the library's
+bank 0.
 
 ## API overview
 

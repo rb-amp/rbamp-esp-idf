@@ -107,8 +107,7 @@ in chapter [04 · Wiring](04_hardware.md).
 
 ## Module lines (quick cheat sheet)
 
-**BASIC** and **STANDARD (STD)** modules are shipping; PRO is not
-implemented in the component. BASIC follows the logic of a classic
+**BASIC** and **STANDARD (STD)** modules are shipping. BASIC follows the logic of a classic
 mechanical meter — one-way (consumption-only) accounting; STD keeps
 signed energy counters:
 
@@ -116,7 +115,6 @@ signed energy counters:
 |---|---|---|---|
 | **BASIC** | signed (negative = export to the grid, visible in real time) | each **100 ms window** of average P is clamped to `max(P, 0)` before being added to the period accumulator | **monotonic** — consumption-only accounting |
 | **STANDARD (STD)** | signed; also reactive and apparent power | snapshot banks, or counter differences — export is kept (import and export counted separately) | **signed** net value (negative = net export) |
-| **PRO** | not implemented | not implemented | not implemented |
 
 For details, see chapter [02 · Module lines](02_tiers.md). At the
 component level the same `rbamp_handle_t` handle is used regardless

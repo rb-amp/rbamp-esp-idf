@@ -531,7 +531,7 @@ link glitches in the ESP-IDF I²C stack.
 
 ### Per-channel reads
 
-> **Native protocol:** [RT register reference (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#rt-register-reference) · [Bidirectional accounting (STANDARD (STD)) (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#bidirectional-accounting-standard-std)
+> **Native protocol:** [RT register reference (realtime-polling)](https://github.com/rb-amp/rbamp-docs/blob/main/realtime-polling.md#rt-register-reference) · [Bidirectional accounting (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#bidirectional-accounting)
 
 ```c
 esp_err_t rbamp_read_voltage      (rbamp_handle_t dev, uint8_t phase, float *out);
@@ -2355,7 +2355,7 @@ address.
 
 ### Life-time energy counters
 
-> **Native protocol:** [Bidirectional accounting (STANDARD (STD)) (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#bidirectional-accounting-standard-std)
+> **Native protocol:** [Bidirectional accounting (period-metering)](https://github.com/rb-amp/rbamp-docs/blob/main/period-metering.md#bidirectional-accounting)
 
 For a module that keeps persisted energy counters on the device
 (`RBAMP_STD_CAP_ONDEVICE_ENERGY`).

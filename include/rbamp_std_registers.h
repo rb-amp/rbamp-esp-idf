@@ -5,7 +5,7 @@
 #define RBAMP_STD_REGISTERS_H
 #include <stdint.h>
 
-#define RBAMP_STD_SCHEMA_CRC32   0xB9F0C00EU
+#define RBAMP_STD_SCHEMA_CRC32   0x430F51B7U
 
 #define RBAMP_STD_MAP_VERSION          0x0036U   /* VERSION reg (0x0003) target */
 #define RBAMP_STD_PTR_WIDTH            0x0010U   /* 16-bit BE pointer, auto-increment */

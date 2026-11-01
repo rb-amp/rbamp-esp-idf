@@ -48,7 +48,7 @@ exist). The ESP-IDF Component Manager fetches the tagged release:
 dependencies:
   rbamp:
     git: https://github.com/rb-amp/rbamp-esp-idf.git
-    version: v1.7.2
+    version: v1.7.3
 ```
 
 The component is downloaded on the next `idf.py build` (or

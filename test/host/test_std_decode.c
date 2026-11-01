@@ -479,7 +479,23 @@ static void test_digest(void)
     CHECK(strcmp(rbamp_basic_fw_name(0x03), "<1.2") == 0 && strcmp(rbamp_basic_fw_name(0x00), "<1.2") == 0);
     CHECK(rbamp_basic_fw_name(0x06) == NULL && rbamp_basic_fw_name(0x08) == NULL && rbamp_basic_fw_name(0x09) == NULL);
     CHECK(strcmp(rbamp_basic_fw_name(0x0D), "1.4.21") == 0 && strcmp(rbamp_basic_fw_name(0x0C), "1.4.20") == 0);
-    CHECK(rbamp_basic_fw_name(0x0E) == NULL && rbamp_basic_fw_name(0xFF) == NULL);
+    CHECK(strcmp(rbamp_basic_fw_name(0x0E), "1.4.22") == 0);
+    CHECK(rbamp_basic_fw_name(0x0F) == NULL && rbamp_basic_fw_name(0xFF) == NULL);
+}
+
+static void test_period_source(void)
+{
+    /* bit 13 = counters, bit 8 = banks. Counters win when both are present
+     * (image 0x7E); banks alone still drive the period; the bank API is gated
+     * on bit 8 whatever the source. */
+    CHECK(rbampi_std_period_source(0x2000) == RBAMP_STD_PERIOD_COUNTERS);
+    CHECK(rbampi_std_period_source(0x0100) == RBAMP_STD_PERIOD_LATCH);
+    CHECK(rbampi_std_period_source(0x2100) == RBAMP_STD_PERIOD_COUNTERS);
+    CHECK(rbampi_std_period_source(0x0000) == RBAMP_STD_PERIOD_NONE);
+    CHECK(rbampi_std_period_source(0xDEFF) == RBAMP_STD_PERIOD_NONE);   /* neither bit */
+    CHECK(rbampi_std_period_source(0xFFFF) == RBAMP_STD_PERIOD_COUNTERS);
+    CHECK(rbampi_std_has_banks(0x2100) && rbampi_std_has_banks(0x0100));
+    CHECK(!rbampi_std_has_banks(0x2000) && !rbampi_std_has_banks(0x0000) && !rbampi_std_has_banks(0xFEFF));
 }
 
 static void test_sct_rating(void)
@@ -526,6 +542,7 @@ int main(void)
     test_phase_seq();
     test_fw_gates();
     test_sct_rating();
+    test_period_source();
     printf("%s: %d checks, %d failed\n", fails ? "FAIL" : "PASS", checks, fails);
     return fails ? 1 : 0;
 }

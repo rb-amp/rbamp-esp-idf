@@ -6,7 +6,7 @@
 #     idf.py add-dependency "rbamp/rbamp^1.7"
 
 description: "Client component for the rbAmp I²C sensor / dimmer module."
-version: "1.7.2"
+version: "1.7.3"
 license: "MIT"
 url: "https://github.com/rb-amp/rbamp-esp-idf"
 repository: "https://github.com/rb-amp/rbamp-esp-idf.git"

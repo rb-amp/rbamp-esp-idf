@@ -7,6 +7,36 @@ All notable changes to this component are documented here. The format follows
 Public releases resume with this version; intermediate versions were released
 internally only.
 
+## 1.7.3 — STD energy stays on the counters, 100 A and 50 A clamp models, locked-module message (2026-11-01)
+
+### Fixed
+- STD modules that report both snapshot banks (capability bit 8) and on-device
+  energy counters (bit 13), such as module image 0x0001007E: energy and the
+  period calls now stay on the persisted counters. Before, such a module was
+  switched to host-integrated bank 0 without any sign. The snapshot-bank calls
+  (`rbamp_std_arm_banks`, `rbamp_std_latch`, `rbamp_std_read_latch`) are a
+  separate tool that depends on bit 8 only and work on these modules as
+  before. `rbamp_std_info_t.period_source` reports the source actually used.
+
+### Added
+- README: "STD line" section with the minimum component version for module
+  image 0x0001007E and the snapshot-bank calls.
+- Example `std_meter` arms its own bank 1 on every module that reports latch
+  banks, also when the energy comes from the counters.
+- Firmware name for BASIC `REG_VERSION` 0x0E: `rbamp_basic_fw_name()` returns
+  "1.4.22" (all BASIC variants).
+- Sensor-model registry: clamp 2000:1 codes 11 (50 A) and 13 (100 A) are now
+  characterized models (rated 50.0 A / 100.0 A, full scale 62.5 A / 116.5 A,
+  peak 88.4 A / 164.7 A). Code 12 (80 A) stays for modules already bound to it.
+
+### Changed
+- `rbamp_set_ct_model_ch_force()` on a BASIC module of class 2 or 3 returns
+  `ESP_ERR_INVALID_STATE` with a log line naming the locked configuration when
+  the module refuses the write (firmware 1.4.22 and later refuse class and
+  model writes on a factory-paired module outside maintenance mode). Before,
+  the refusal surfaced as a generic parameter error. The force path works on
+  such a module in maintenance mode only.
+
 ## 1.7.2 — SCT-013 rating correction, resume after master downtime, one-transaction window reads (2026-10-21)
 
 First public release since 1.5.0. It carries 1.6.0 – 1.7.2 together: the STD

@@ -68,6 +68,7 @@ void app_main(void)
     }
     const bool std = (rbamp_line(dev) == RBAMP_LINE_STD);
     rbamp_std_period_source_t psrc = RBAMP_STD_PERIOD_NONE;
+    bool have_banks = false;   /* capability bit 8, independent of the energy source */
     ESP_LOGI(TAG, "rbAmp @ 0x%02X  line=%s  fw=0x%02X  channels=%u  voltage_hw=%s",
              rbamp_address(dev), std ? "STD" : "BASIC", rbamp_firmware_version(dev),
              rbamp_channels(dev), rbamp_has_voltage_hw(dev) ? "yes" : "no");
@@ -79,6 +80,7 @@ void app_main(void)
         rbamp_std_info_t info;
         rbamp_std_info(dev, &info);
         psrc = info.period_source;
+        have_banks = (info.capabilities & RBAMP_STD_CAP_MULTI_LATCH) != 0;
         ESP_LOGI(TAG, "STD map 0x%02X  V=%u I=%u  caps=0x%04X", info.map_version,
                  info.n_voltage, info.n_current, info.capabilities);
 
@@ -89,26 +91,28 @@ void app_main(void)
         err = rbamp_std_set_harmonics(dev, true);
         if (err != ESP_OK) ESP_LOGW(TAG, "harmonics not enabled: %s", rbamp_err_to_str(err));
 
-        /* Period energy depends on what the module offers: modules with latch
-         * banks get a bank of our own next to the library's bank 0 (primer
-         * latch so the first period starts now); modules that keep persisted
-         * energy counters instead need nothing armed — the library's period
-         * snapshot reads the counter difference. */
-        if (psrc == RBAMP_STD_PERIOD_LATCH) {
+        /* Two independent tools. A module with latch banks (capability bit 8)
+         * gets a bank of our own next to the library's bank 0 (primer latch so
+         * the first period starts now), whatever its energy source. Modules
+         * that keep persisted energy counters (bit 13) take the library's
+         * energy and period from the counters; nothing needs arming for that. */
+        if (have_banks) {
             ESP_ERROR_CHECK(rbamp_std_arm_banks(dev, (1u << 0) | (1u << ENERGY_BANK)));
             ESP_ERROR_CHECK(rbamp_std_latch(dev, ENERGY_BANK));
-        } else if (psrc == RBAMP_STD_PERIOD_COUNTERS) {
+        }
+        if (psrc == RBAMP_STD_PERIOD_COUNTERS) {
             rbamp_std_energy_t lt;
             if (rbamp_std_read_energy(dev, &lt) == ESP_OK) {
                 ESP_LOGI(TAG, "life-time: import %lld Wh  export %lld Wh  net %lld Wh  (gen %" PRIu32 ", up %" PRIu32 " s)",
                          (long long)lt.act_import_wh, (long long)lt.act_export_wh,
                          (long long)lt.act_net_wh, lt.generation, lt.uptime_s);
             }
-        } else {
+        } else if (!have_banks) {
             ESP_LOGW(TAG, "module offers no period energy path");
         }
     }
-    int64_t period_start_us = esp_timer_get_time();
+    int64_t period_start_us = esp_timer_get_time();   /* counters period */
+    int64_t bank_start_us   = period_start_us;        /* own bank period */
 
     /* 3. Poll loop. */
     while (true) {
@@ -159,10 +163,11 @@ void app_main(void)
                          rbamp_energy_wh(dev, RBAMP_ENERGY_CH_TOTAL),
                          ps.module_restarted ? "  (module restarted in this period)" : "");
             }
-        } else if (psrc == RBAMP_STD_PERIOD_LATCH && now_us - period_start_us >= (int64_t)PERIOD_MS * 1000) {
-            const uint32_t dt_ms = (uint32_t)((now_us - period_start_us) / 1000);
+        }
+        if (have_banks && now_us - bank_start_us >= (int64_t)PERIOD_MS * 1000) {
+            const uint32_t dt_ms = (uint32_t)((now_us - bank_start_us) / 1000);
             if (rbamp_std_latch(dev, ENERGY_BANK) == ESP_OK) {
-                period_start_us = now_us;
+                bank_start_us = now_us;
                 vTaskDelay(pdMS_TO_TICKS(RBAMP_STD_SETTLE_MS_LATCH_PERIOD));
                 rbamp_std_latch_t lt;
                 double wh_in = 0, wh_out = 0;

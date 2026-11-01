@@ -30,6 +30,12 @@ static void fw_on_command(uint8_t op)
     }
 }
 
+/* fw 1.4.22 on a factory-paired module: class and model writes are refused with ERR_PARAM. */
+static void locked_on_command(uint8_t op)
+{
+    if (op == RBAMP_CMD_SET_CT_MODEL_CH0) sim_regs[RBAMP_V2_REG_ERROR] = RBAMP_V2_DEV_ERR_PARAM;
+}
+
 /* A UI1 on fw 1.4.19 in the flash state: class 1, model X bound, G_cal applied. */
 static void image_ui1(uint16_t cap, uint8_t cls, uint8_t model, float gain)
 {
@@ -180,6 +186,26 @@ int main(void)
     image_ui1(0, 1, 9, G_CAL);
     dev = new_begun();
     CHECK(rbamp_sct_correction(dev, 0, &c) == ESP_OK && c.status == RBAMP_SCT_UNKNOWN_MODEL && c.scale == 1.0f, "unknown: status %d", c.status);
+    rbamp_del(dev);
+
+    /* 9. fw 1.4.22, class 2, module locked: the normal path refuses without bus
+     * writes; the force path reaches the module, gets ERR_PARAM and reports the
+     * locked configuration (INVALID_STATE), not a generic parameter error. */
+    image_ui1(RBAMPI_CAP_SCT_RATING_SELF, 2, 10, G_CAL);
+    sim_regs[RBAMP_REG_VERSION] = 0x0E;
+    sim_on_command = locked_on_command;
+    dev = new_begun();
+    unsigned cmds = sim_cmd_writes;
+    CHECK(rbamp_set_ct_model_ch(dev, 0, 11) == ESP_ERR_INVALID_STATE && sim_cmd_writes == cmds, "locked: normal path (cmd writes %u->%u)", cmds, sim_cmd_writes);
+    CHECK(rbamp_set_ct_model_ch_force(dev, 0, 11) == ESP_ERR_INVALID_STATE, "locked: force path verdict");
+    CHECK(sim_cmd_writes > cmds, "locked: force path did not reach the module");
+    rbamp_del(dev);
+    /* 9b. Class 1 (user-fitted sensor), module rejects an unknown code: still a parameter error. */
+    image_ui1(RBAMPI_CAP_SCT_RATING_SELF, 1, 3, G_CAL);
+    sim_regs[RBAMP_REG_VERSION] = 0x0E;
+    sim_on_command = locked_on_command;
+    dev = new_begun();
+    CHECK(rbamp_set_ct_model_ch_force(dev, 0, 99) == ESP_ERR_INVALID_ARG, "class1 bad code: force verdict");
     rbamp_del(dev);
 
     printf("%s: %d checks, %d failed\n", fails ? "FAIL" : "PASS", checks, fails);

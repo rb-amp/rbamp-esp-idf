@@ -180,6 +180,12 @@ float rbampi_sct_rating_corr(uint8_t code);   /* bench rating correction c(X); 1
  * set (with status PENDING) when g_applied is bit-equal to the raw preset of
  * a model other than 030 and no reset was issued yet. *scale = 1 unless
  * CORRECTED. */
+/* STD period/energy source from the capability word: on-device counters
+ * (bit 13) win whenever present; latch banks (bit 8) are a separate tool and
+ * the period source only when the module has no counters. */
+rbamp_std_period_source_t rbampi_std_period_source(uint16_t caps);
+static inline bool rbampi_std_has_banks(uint16_t caps) { return (caps & RBAMP_STD_CAP_MULTI_LATCH) != 0; }
+
 rbamp_sct_status_t rbampi_sct_decide(uint16_t capability, uint8_t cls, uint8_t model,
                                      float g_applied, bool after_reset,
                                      bool *need_reset, float *scale);

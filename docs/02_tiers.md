@@ -2,8 +2,8 @@
 
 ## What a module line is
 
-**rbAmp** modules come in module lines: **BASIC** and **STANDARD (STD)**
-(a **PRO** line is not implemented in this component). A module line is a
+**rbAmp** modules come in module lines: **BASIC** and **STANDARD (STD)**.
+A module line is a
 complete bundle of **hardware revision and firmware**, not a software
 flag. Moving between lines requires a physical SKU change, not a
 firmware update.
@@ -22,14 +22,12 @@ export to the grid).
 ## Current status
 
 **BASIC and STANDARD (STD) modules are shipping** and are both supported
-by this component (version 1.7.2). The **PRO** line is not implemented in
-the component.
+by this component (version 1.7.3).
 
 | Module line | Status in this component |
 |---|---|
 | **BASIC** | ✅ shipping — `RBAMP_LINE_BASIC` |
 | **STANDARD (STD)** | ✅ shipping — `RBAMP_LINE_STD` |
-| **PRO** | not implemented |
 
 ## BASIC — entry-level consumption-metering module line
 
@@ -155,11 +153,6 @@ chapter "STD line". A working example is
 - Installations that need reactive power, power factor and harmonics
   in addition to active power
 
-## PRO — not implemented
-
-The PRO line is **not implemented** in this component: there is no
-PRO-specific API in version 1.7.2.
-
 ## How to detect the module line at runtime
 
 ![Flowchart for finding out whether you own a BASIC or a STANDARD (STD) module.](images/module-line-detect.png)
@@ -188,8 +181,7 @@ if (rbamp_line(dev) == RBAMP_LINE_STD && rbamp_std_info(dev, &info) == ESP_OK) {
 }
 ```
 
-> **Note**: `rbamp_line()` tells BASIC from STD; the line above STD (PRO)
-> is not implemented. Use the SKU label on the module enclosure as the
+> **Note**: `rbamp_line()` tells BASIC from STD. Use the SKU label on the module enclosure as the
 > source of truth for the exact product.
 
 ## Where line-dependent details are marked in the docs

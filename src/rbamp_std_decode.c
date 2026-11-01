@@ -293,9 +293,17 @@ bool rbampi_digest_needs_rearm(bool *reset_seen, bool events_pending, uint8_t ev
     return true;
 }
 
+rbamp_std_period_source_t rbampi_std_period_source(uint16_t caps)
+{
+    if (caps & RBAMP_STD_CAP_ONDEVICE_ENERGY) return RBAMP_STD_PERIOD_COUNTERS;
+    if (caps & RBAMP_STD_CAP_MULTI_LATCH)     return RBAMP_STD_PERIOD_LATCH;
+    return RBAMP_STD_PERIOD_NONE;
+}
+
 const char *rbamp_basic_fw_name(uint8_t version)
 {
     switch (version) {
+        case 0x0E: return "1.4.22";
         case 0x0D: return "1.4.21";
         case 0x0C: return "1.4.20";
         case 0x0B: return "1.4.19";

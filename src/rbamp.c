@@ -886,9 +886,7 @@ static esp_err_t _std_begin(rbamp_handle_t dev)
      * persisted counters instead (CMD_LATCH_PERIOD there is an unknown
      * command and the bank region is unmapped). Decide once, here, so no
      * latch traffic ever reaches a module without banks. */
-    dev->std_period_src = (dev->std_caps & RBAMP_STD_CAP_MULTI_LATCH)    ? RBAMP_STD_PERIOD_LATCH
-                        : (dev->std_caps & RBAMP_STD_CAP_ONDEVICE_ENERGY) ? RBAMP_STD_PERIOD_COUNTERS
-                        : RBAMP_STD_PERIOD_NONE;
+    dev->std_period_src = rbampi_std_period_source(dev->std_caps);
     dev->std_fw_ver = 0;
     if (dev->std_version >= 0x35) {
         uint32_t fv = 0;
@@ -2544,12 +2542,13 @@ esp_err_t rbamp_read_sensor_class(rbamp_handle_t dev, uint8_t *out)
  * module already holds this model (nothing to write). ESP_ERR_INVALID_STATE =
  * factory-paired module (class 2/3) and @p force is false. */
 static esp_err_t _ct_model_guard(rbamp_handle_t dev, uint8_t channel, uint8_t code,
-                                 bool force, bool *skip)
+                                 bool force, bool *skip, uint8_t *cls_out)
 {
     *skip = false;
     uint8_t cls = 0, cur = 0;
     esp_err_t err = rbamp_read_sensor_class(dev, &cls);
     if (err != ESP_OK) return err;
+    if (cls_out) *cls_out = cls;
     err = rbamp_read_ct_model_ch(dev, channel, &cur);
     if (err != ESP_OK) cur = 0xFF;   /* unreadable mirror: never mistaken for "same" */
     switch (rbampi_ct_model_write_policy(cls, cur, code, force)) {
@@ -2612,7 +2611,7 @@ esp_err_t rbamp_set_ct_model(rbamp_handle_t dev, uint8_t code)
     esp_err_t err = _check_sensor_class_set(dev);
     if (err != ESP_OK) return err;
     bool skip = false;
-    err = _ct_model_guard(dev, 0, code, false, &skip);
+    err = _ct_model_guard(dev, 0, code, false, &skip, NULL);
     if (err != ESP_OK) return err;
     if (skip) return ESP_OK;
     /* v1.3 A1: REG_CT_MODEL (0x05) is PURE STAGING — a bare write no longer
@@ -2736,10 +2735,21 @@ static esp_err_t _set_ct_model_ch(rbamp_handle_t dev, uint8_t channel, uint8_t c
      * code range: the device validates (class, model). */
     if (channel >= dev->channels) return ESP_ERR_INVALID_ARG;
     bool skip = false;
-    esp_err_t err = _ct_model_guard(dev, channel, code, force, &skip);
+    uint8_t cls = 0;
+    esp_err_t err = _ct_model_guard(dev, channel, code, force, &skip, &cls);
     if (err != ESP_OK) return err;
     if (skip) return ESP_OK;
     err = _apply_ct_model_ch(dev, channel, code);
+    if (err == ESP_ERR_INVALID_ARG && force && !dev->std && rbampi_sensor_class_paired(cls)) {
+        /* The channel and the call are already validated, so the only source of
+         * INVALID_ARG here is the module's ERR_PARAM: firmware 1.4.22 and later
+         * refuse class and model writes on a factory-paired module outside
+         * maintenance mode. Say that instead of a generic parameter error. */
+        ESP_LOGW(TAG, "set_ct_model_ch_force ch%u: factory-paired module (class %u) — "
+                      "configuration locked; the write works in maintenance mode only",
+                 channel, cls);
+        return ESP_ERR_INVALID_STATE;
+    }
     if (err != ESP_OK) return err;
     /* Readback-confirm the applied model before persisting (SPEC test rule: a
      * write is not accepted until confirmed by readback). A STABLE WRONG mirror
@@ -2842,7 +2852,7 @@ esp_err_t rbamp_configure_channels(rbamp_handle_t dev, rbamp_sensor_class_t cls,
          * unit's calibration with the generic preset), a factory-paired
          * module is not reconfigured. */
         bool skip = false;
-        err = _ct_model_guard(dev, ch, models[ch], false, &skip);
+        err = _ct_model_guard(dev, ch, models[ch], false, &skip, NULL);
         if (err != ESP_OK) return err;
         if (skip) continue;
         /* Bind WITHOUT a per-channel SAVE — batched behind one terminal save
@@ -4280,7 +4290,7 @@ esp_err_t rbamp_std_read_energy(rbamp_handle_t dev, rbamp_std_energy_t *out)
 esp_err_t rbamp_std_arm_banks(rbamp_handle_t dev, uint8_t mask)
 {
     if (!dev) return ESP_ERR_INVALID_ARG;
-    if (!dev->std || dev->std_period_src != RBAMP_STD_PERIOD_LATCH) return ESP_ERR_NOT_SUPPORTED;
+    if (!dev->std || !rbampi_std_has_banks(dev->std_caps)) return ESP_ERR_NOT_SUPPORTED;
     if (!(mask & 0x01u)) {
         ESP_LOGW(TAG, "arm mask 0x%02X clears bank 0 — rbamp_read_period_snapshot will report EMPTY", mask);
     }
@@ -4290,7 +4300,7 @@ esp_err_t rbamp_std_arm_banks(rbamp_handle_t dev, uint8_t mask)
 esp_err_t rbamp_std_latch(rbamp_handle_t dev, uint8_t bank)
 {
     if (!dev) return ESP_ERR_INVALID_ARG;
-    if (!dev->std || dev->std_period_src != RBAMP_STD_PERIOD_LATCH) return ESP_ERR_NOT_SUPPORTED;
+    if (!dev->std || !rbampi_std_has_banks(dev->std_caps)) return ESP_ERR_NOT_SUPPORTED;
     if (bank >= RBAMP_STD_LATCH_MAX) return ESP_ERR_INVALID_ARG;
     return _std_latch_bank(dev, bank);
 }
@@ -4298,7 +4308,7 @@ esp_err_t rbamp_std_latch(rbamp_handle_t dev, uint8_t bank)
 esp_err_t rbamp_std_read_latch(rbamp_handle_t dev, uint8_t bank, rbamp_std_latch_t *out)
 {
     if (!dev || !out) return ESP_ERR_INVALID_ARG;
-    if (!dev->std || dev->std_period_src != RBAMP_STD_PERIOD_LATCH) return ESP_ERR_NOT_SUPPORTED;
+    if (!dev->std || !rbampi_std_has_banks(dev->std_caps)) return ESP_ERR_NOT_SUPPORTED;
     if (bank >= RBAMP_STD_LATCH_MAX) return ESP_ERR_INVALID_ARG;
     esp_err_t err = _std_read_latch_bank(dev, bank, out);
     if (err != ESP_OK) return err;
